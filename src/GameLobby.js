@@ -23,6 +23,8 @@ function GameLobby() {
           updateDoc(gameRef, {
             players: arrayUnion(playerName)
           });
+          const gameData = docSnapshot.data();
+          setIsCreator(gameData.creator === playerName);
         } else {
           // Create the game document
           setDoc(gameRef, {
@@ -30,9 +32,9 @@ function GameLobby() {
             creator: playerName,
             gameStarted: false
           });
+          setIsCreator(true);
         }
   
-        setIsCreator(location.state.isCreator || false);
         setLoading(false);  // Loading is done after this initial process
       });
   
