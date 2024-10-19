@@ -1,17 +1,19 @@
 import React from 'react';
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import Home from './Home';
+import GameLobby from './GameLobby';
+import JoinGame from './JoinGame';
 import './App.css';
 
 function App() {
   return (
-    <div className="App">
-      <h1>Fake Tasker</h1>
-      <button onClick={() => alert('Create Game clicked')} disabled>
-        Create Game
-      </button>
-      <button onClick={() => alert('Join Game clicked')} disabled>
-        Join Game
-      </button>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/join" element={<JoinGame />} />
+        <Route path="/lobby/:gameCode" element={<GameLobby />} />
+      </Routes>
+    </Router>
   );
 }
 
