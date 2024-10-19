@@ -1,69 +1,97 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
-import { db } from './firebase';  // Import Firestore config
-import { doc, setDoc, updateDoc, arrayUnion, getDoc, onSnapshot } from "firebase/firestore";
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { db, realtimeDb, ref, onDisconnect, set, remove } from './firebase';  // Import Realtime Database functions
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";  // Firestore functions
 
 function GameLobby() {
   const { gameCode } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const [players, setPlayers] = useState([]);
   const [isCreator, setIsCreator] = useState(false);
-  const [loading, setLoading] = useState(true);  // Track loading state
-
+  const [loading, setLoading] = useState(true);
+  const playerName = location.state?.playerName || '';  // Get player name from location state
   const maxPlayers = 15;
 
-  // Add the player to Firestore, create the game if it doesn't exist
   useEffect(() => {
-    const newPlayer = location.state?.playerName;
-
-    if (newPlayer) {
-      const gameRef = doc(db, "games", gameCode);
-
-      // Check if the document exists
+    const gameRef = doc(db, "games", gameCode);
+    const playerRef = ref(realtimeDb, `games/${gameCode}/players/${playerName}`);
+    
+    if (playerName) {
       getDoc(gameRef).then((docSnapshot) => {
         if (docSnapshot.exists()) {
-          // If the game exists, update the players array
           updateDoc(gameRef, {
-            players: arrayUnion(newPlayer)
+            players: arrayUnion(playerName)
           });
         } else {
-          // If the game doesn't exist, create the document with the new player
           setDoc(gameRef, {
-            players: [newPlayer]
+            players: [playerName],
+            creator: playerName  // Mark the creator of the game
           });
         }
-      }).finally(() => {
-        // Set loading to false after the document has been handled
+
+        setIsCreator(location.state.isCreator || false);
         setLoading(false);
       });
 
-      setIsCreator(location.state.isCreator || false);  // Set isCreator flag
-    }
-  }, [gameCode, location.state]);
+      set(playerRef, { connected: true });
 
-  // Firestore real-time listener to keep players in sync
+      onDisconnect(playerRef).remove().then(() => {
+        updateDoc(gameRef, {
+          players: arrayRemove(playerName)
+        });
+      });
+    }
+  }, [gameCode, playerName, location.state]);
+
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
 
     const unsubscribe = onSnapshot(gameRef, (doc) => {
       if (doc.exists()) {
         const gameData = doc.data();
-        setPlayers(gameData.players || []);  // Update players in real-time
+        setPlayers(gameData.players || []);
       }
     });
 
-    return () => unsubscribe();  // Clean up listener on component unmount
+    return () => unsubscribe();
   }, [gameCode]);
 
-  // Display a loading spinner while data is loading
+  // Assign roles and navigate to countdown screen
+  const startGame = async () => {
+    if (players.length > 0) {
+      const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
+      const imposter = shuffledPlayers[0];
+      const crewmates = shuffledPlayers.slice(1);
+
+      const roles = {};
+      roles[imposter] = 'Imposter';
+      crewmates.forEach((crewmate) => {
+        roles[crewmate] = 'Crewmate';
+      });
+
+      const gameRef = doc(db, "games", gameCode);
+      await updateDoc(gameRef, { roles });
+
+      // Pass the isCreator flag to the countdown screen
+      navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator } });
+    }
+  };
+
+  const finishGame = async () => {
+    const gameRef = doc(db, "games", gameCode);
+
+    try {
+      await deleteDoc(gameRef);  // Delete the game document from Firestore
+      alert("Game ended and data deleted.");
+      navigate("/");  // Navigate back to home
+    } catch (error) {
+      console.error("Error deleting document: ", error);
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="loading-spinner">
-        <h2>Loading game...</h2>
-        {/* You can replace this with a fancier spinner */}
-        <div className="spinner"></div>
-      </div>
-    );
+    return <div>Loading game data...</div>;
   }
 
   return (
@@ -78,12 +106,16 @@ function GameLobby() {
           ))}
         </ul>
       </div>
-      
-      {/* Only show the Start Game button if the player is the creator */}
+
       {isCreator && (
-        <button onClick={() => alert('Start Game clicked!')} disabled={players.length === 0}>
-          Start Game
-        </button>
+        <div>
+          <button onClick={startGame} disabled={players.length === 0}>
+            Start Game
+          </button>
+          <button onClick={finishGame} disabled={players.length === 0}>
+            Finish Game and Delete Data
+          </button>
+        </div>
       )}
     </div>
   );

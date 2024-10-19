@@ -6,9 +6,10 @@ import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";  // Fir
 function JoinGame() {
   const [gameCode, setGameCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const location = useLocation();
+  const location = useLocation();  // Get the location object to access passed state
   const navigate = useNavigate();
-
+  
+  // Get the player name from the Home screen
   const playerName = location.state?.playerName || '';
 
   const handleJoinGame = async (e) => {
@@ -18,25 +19,25 @@ function JoinGame() {
     const gameRef = doc(db, "games", gameCode);
 
     try {
-        // Check if the game exists
-        const gameDoc = await getDoc(gameRef);
-  
-        if (gameDoc.exists()) {
-          // If the game exists, add the player to the Firestore document
-          await updateDoc(gameRef, {
-            players: arrayUnion(playerName)  // Add the player from the Home screen
-          });
-  
-          // Redirect to the GameLobby with the game code and player name
-          navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: false } });
-        } else {
-          // If the game does not exist, show an error message
-          setErrorMessage("Invalid game code. Please try again.");
-        }
-      } catch (error) {
-        console.error("Error joining game: ", error);
-        setErrorMessage("Something went wrong. Please try again.");
+      // Check if the game exists
+      const gameDoc = await getDoc(gameRef);
+
+      if (gameDoc.exists()) {
+        // If the game exists, add the player to the Firestore document
+        await updateDoc(gameRef, {
+          players: arrayUnion(playerName)  // Add the player from the Home screen
+        });
+
+        // Redirect to the GameLobby with the game code and player name
+        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: false } });
+      } else {
+        // If the game does not exist, show an error message
+        setErrorMessage("Invalid game code. Please try again.");
       }
+    } catch (error) {
+      console.error("Error joining game: ", error);
+      setErrorMessage("Something went wrong. Please try again.");
+    }
   };
 
   return (
@@ -47,7 +48,7 @@ function JoinGame() {
           type="text"
           placeholder="Enter game code"
           value={gameCode}
-          onChange={(e) => setGameCode(e.target.value)}
+          onChange={(e) => setGameCode(e.target.value.toUpperCase())}
           required
         />
         <button type="submit">Join Game</button>
