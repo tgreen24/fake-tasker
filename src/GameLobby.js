@@ -24,19 +24,20 @@ function GameLobby() {
             players: arrayUnion(playerName)
           });
         } else {
+          // Create the game document
           setDoc(gameRef, {
             players: [playerName],
             creator: playerName,
-            gameStarted: false  // Add a gameStarted flag
+            gameStarted: false
           });
         }
-
+  
         setIsCreator(location.state.isCreator || false);
-        setLoading(false);
+        setLoading(false);  // Loading is done after this initial process
       });
-
+  
       set(playerRef, { connected: true });
-
+  
       onDisconnect(playerRef).remove().then(() => {
         updateDoc(gameRef, {
           players: arrayRemove(playerName)
@@ -49,14 +50,16 @@ function GameLobby() {
     const gameRef = doc(db, "games", gameCode);
   
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (!docSnapshot.exists()) {
+      if (docSnapshot.exists()) {
+        console.log("Game document exists, no need to navigate.");
+      } else if (!loading) {  // Only navigate if it's not during initial loading
         console.log("Game deleted. Navigating to home...");
         navigate("/");
       }
     });
   
     return () => unsubscribe();  // Clean up the listener on component unmount
-  }, [gameCode, navigate]);
+  }, [gameCode, navigate, loading]);
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
