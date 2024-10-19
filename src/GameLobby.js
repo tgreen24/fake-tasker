@@ -26,7 +26,8 @@ function GameLobby() {
         } else {
           setDoc(gameRef, {
             players: [playerName],
-            creator: playerName  // Mark the creator of the game
+            creator: playerName,
+            gameStarted: false  // Add a gameStarted flag
           });
         }
 
@@ -46,18 +47,37 @@ function GameLobby() {
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
+  
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (!docSnapshot.exists()) {
+        console.log("Game deleted. Navigating to home...");
+        navigate("/");
+      }
+    });
+  
+    return () => unsubscribe();  // Clean up the listener on component unmount
+  }, [gameCode, navigate]);
+
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
 
     const unsubscribe = onSnapshot(gameRef, (doc) => {
       if (doc.exists()) {
         const gameData = doc.data();
         setPlayers(gameData.players || []);
+        setIsCreator(gameData.creator === playerName);
+
+        // If the game has started and we're not already on the countdown screen
+        if (gameData.gameStarted && !location.state?.onCountdownScreen) {
+          navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
+        }
       }
     });
 
     return () => unsubscribe();
-  }, [gameCode]);
+  }, [gameCode, playerName, navigate, location.state]);
 
-  // Assign roles and navigate to countdown screen
+  // Assign roles and update gameStarted flag
   const startGame = async () => {
     if (players.length > 0) {
       const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
@@ -71,10 +91,10 @@ function GameLobby() {
       });
 
       const gameRef = doc(db, "games", gameCode);
-      await updateDoc(gameRef, { roles });
+      await updateDoc(gameRef, { roles, gameStarted: true });  // Mark game as started
 
-      // Pass the isCreator flag to the countdown screen
-      navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator } });
+      // Pass isCreator to Countdown screen
+      navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
     }
   };
 

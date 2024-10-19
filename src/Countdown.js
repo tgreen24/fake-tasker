@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { db } from './firebase';  // Firestore config
-import { doc, getDoc } from "firebase/firestore";  // Firestore functions
+import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";  // Firestore functions
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -33,9 +33,45 @@ function Countdown() {
     return () => clearInterval(timer);  // Clean up the timer on component unmount
   }, [countdown, gameCode, playerName]);
 
-  const endGameRound = () => {
-    // Navigate all players back to the lobby
-    navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator } });
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+  
+    // Set up Firestore listener to detect when game is deleted
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (!docSnapshot.exists()) {
+        console.log("Game deleted. Navigating to home...");
+        navigate("/");
+      }
+    });
+  
+    return () => unsubscribe();  // Clean up the listener when the component unmounts
+  }, [gameCode, navigate]);
+
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+
+    // Set up Firestore listener to detect when game is ended
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+
+        // If gameStarted is false, navigate everyone back to the lobby
+        if (!gameData.gameStarted) {
+          console.log("Game round ended. Navigating back to lobby...");
+          navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
+        }
+      }
+    });
+
+    return () => unsubscribe();  // Clean up the listener when the component unmounts
+  }, [gameCode, navigate, playerName, isCreator]);
+
+
+  const endGameRound = async () => {
+    const gameRef = doc(db, "games", gameCode);
+
+    // Set roundEnded to true in Firestore to notify all players
+    await updateDoc(gameRef, { gameStarted: false });
   };
 
   if (countdown > 0) {
