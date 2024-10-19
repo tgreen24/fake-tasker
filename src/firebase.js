@@ -8,12 +8,12 @@ import { getDatabase, ref, onDisconnect, set, remove } from "firebase/database";
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDxLCiUR9KPn5IgxZee5v2ZF_1me8ylSoM",
-  authDomain: "fake-tasker-770e9.firebaseapp.com",
-  projectId: "fake-tasker-770e9",
-  storageBucket: "fake-tasker-770e9.appspot.com",
-  messagingSenderId: "495962316387",
-  appId: "1:495962316387:web:227d16d0c1e4151c0be256"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 // Initialize Firebase
