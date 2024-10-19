@@ -8,10 +8,23 @@ function Countdown() {
   const location = useLocation();
   const navigate = useNavigate();
   const playerName = location.state?.playerName || '';
-  const isCreator = location.state?.isCreator || false;  // Retrieve isCreator from location state
+  const [isCreator, setIsCreator] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [role, setRole] = useState('');
 
+  // Fetch creator and role as soon as the component mounts
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+    getDoc(gameRef).then((docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+        setIsCreator(gameData.creator === playerName);  // Set if the player is the creator
+        setRole(gameData.roles[playerName]);  // Set the role of the player
+      }
+    });
+  }, [gameCode, playerName]);
+
+  // Countdown logic
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdown((prev) => prev - 1);
@@ -19,38 +32,29 @@ function Countdown() {
 
     if (countdown === 0) {
       clearInterval(timer);
-
-      const gameRef = doc(db, "games", gameCode);
-      getDoc(gameRef).then((docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const gameData = docSnapshot.data();
-          const playerRole = gameData.roles[playerName];
-          setRole(playerRole);
-        }
-      });
     }
 
     return () => clearInterval(timer);  // Clean up the timer on component unmount
-  }, [countdown, gameCode, playerName]);
+  }, [countdown]);
 
+  // Listener for game deletion
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
-  
-    // Set up Firestore listener to detect when game is deleted
+
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (!docSnapshot.exists()) {
         console.log("Game deleted. Navigating to home...");
         navigate("/");
       }
     });
-  
-    return () => unsubscribe();  // Clean up the listener when the component unmounts
+
+    return () => unsubscribe();  // Clean up the listener on component unmount
   }, [gameCode, navigate]);
 
+  // Listener for game end
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
 
-    // Set up Firestore listener to detect when game is ended
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
@@ -66,12 +70,16 @@ function Countdown() {
     return () => unsubscribe();  // Clean up the listener when the component unmounts
   }, [gameCode, navigate, playerName, isCreator]);
 
-
+  // End the game round
   const endGameRound = async () => {
     const gameRef = doc(db, "games", gameCode);
 
-    // Set roundEnded to true in Firestore to notify all players
-    await updateDoc(gameRef, { gameStarted: false });
+    try {
+      await updateDoc(gameRef, { gameStarted: false });
+      console.log("Game round ended.");
+    } catch (error) {
+      console.error("Error ending game round:", error);
+    }
   };
 
   if (countdown > 0) {
