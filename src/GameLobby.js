@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { db, realtimeDb, ref, onDisconnect, set, remove } from './firebase';  // Import Realtime Database functions
-import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc, onSnapshot, deleteDoc } from "firebase/firestore";  // Firestore functions
+import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc, onSnapshot, deleteDoc, deleteField } from "firebase/firestore";  // Firestore functions
 
 function GameLobby() {
   const { gameCode } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const [players, setPlayers] = useState([]);
+  const [tasks, setTasks] = useState([]);  // Tasks list
+  const [newTask, setNewTask] = useState("");  // New task input
   const [isCreator, setIsCreator] = useState(false);
   const [loading, setLoading] = useState(true);
   const [imposterCount, setImposterCount] = useState(1);  // Default to 1 imposter
@@ -71,6 +73,7 @@ function GameLobby() {
       if (doc.exists()) {
         const gameData = doc.data();
         setPlayers(gameData.players || []);
+        setTasks(gameData.tasks || []);
         setIsCreator(gameData.creator === playerName);
 
         // If the game has started and we're not already on the countdown screen
@@ -83,9 +86,41 @@ function GameLobby() {
     return () => unsubscribe();
   }, [gameCode, playerName, navigate, location.state]);
 
+  // Add a new task to the list
+const addTask = () => {
+    if (newTask.trim() !== "") {
+      const updatedTasks = [...tasks, newTask.trim()];
+      setTasks(updatedTasks);
+      setNewTask("");  // Clear input
+  
+      // Save tasks to Firestore
+      const gameRef = doc(db, "games", gameCode);
+      updateDoc(gameRef, { tasks: updatedTasks });
+    }
+  };
+
   // Assign roles and update gameStarted flag
   const startGame = async () => {
     if (players.length > 1 && imposterCount <= players.length - 1) {  // Ensure valid imposter count
+
+      const gameRef = doc(db, "games", gameCode);
+
+      await updateDoc(gameRef, {
+        killList: [],
+        completedTasks: deleteField()  // Remove the entire completedTasks field from Firestore
+       });
+    
+      // Now clear completed tasks for all players by reinitializing the field
+      const clearedCompletedTasks = {};
+      players.forEach(player => {
+        clearedCompletedTasks[player] = [];  // Reset completed tasks to an empty array for each player
+      });
+
+      await updateDoc(gameRef, {
+        completedTasks: clearedCompletedTasks  // Reinitialize the completedTasks field in Firestore
+      });
+
+          
       const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
       const imposters = shuffledPlayers.slice(0, imposterCount);
       const crewmates = shuffledPlayers.slice(imposterCount);
@@ -98,8 +133,13 @@ function GameLobby() {
         roles[crewmate] = 'Crewmate';
       });
 
-      const gameRef = doc(db, "games", gameCode);
-      await updateDoc(gameRef, { roles, gameStarted: true });  // Mark game as started with reshuffled roles
+      // Assign tasks randomly to crewmates
+      const assignedTasks = {};
+      crewmates.forEach((crewmate) => {
+        assignedTasks[crewmate] = tasks.sort(() => Math.random() - 0.5).slice(0, 3);  // Each crewmate gets 3 random tasks
+      });  
+
+      await updateDoc(gameRef, { roles, gameStarted: true, assignedTasks });  // Mark game as started with reshuffled roles
 
       // Pass isCreator to Countdown screen
       navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
@@ -150,7 +190,7 @@ function GameLobby() {
             Finish Game and Delete Data
           </button>
 
-          {players.length > 5 ? (
+          {players.length > 3 ? (
             <div>
               <label>
                 Number of Imposters:
@@ -167,6 +207,23 @@ function GameLobby() {
           ) : (
             <p>There will be 1 imposter.</p>
           )}
+
+        <div>
+            <h3>Tasks</h3>
+            <ul>
+                {tasks.map((task, index) => (
+                <li key={index}>{task}</li>
+                ))}
+            </ul>
+            <input
+                type="text"
+                value={newTask}
+                onChange={(e) => setNewTask(e.target.value)}
+                placeholder="Enter new task"
+            />
+            <button onClick={addTask}>Add Task</button>
+            </div>
+
         </div>
       )}
     </div>

@@ -11,6 +11,36 @@ function Countdown() {
   const [isCreator, setIsCreator] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [role, setRole] = useState('');
+  const [tasks, setTasks] = useState([]);  // Crewmate's tasks
+  const [completedTasks, setCompletedTasks] = useState([]);  // Completed tasks
+  const [killList, setKillList] = useState([]);  // Imposter's kill list
+  const [crewmates, setCrewmates] = useState([]);
+
+  useEffect(() => {
+    if (countdown === 0) {
+      const gameRef = doc(db, "games", gameCode);
+      getDoc(gameRef).then((docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const gameData = docSnapshot.data();
+          const playerRole = gameData.roles[playerName];
+          setRole(playerRole);
+          setIsCreator(gameData.creator === playerName);
+  
+          // If player is a crewmate, load their assigned tasks
+          if (playerRole === 'Crewmate') {
+            setTasks(gameData.assignedTasks[playerName] || []);
+          }
+
+          // Snippet 2: Imposter logic
+          if (playerRole === 'Imposter') {
+            setKillList(gameData.killList || []);  // Set kill list for imposters
+            const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate');
+            setCrewmates(crewmatesList);  // Set the list of crewmates for imposters
+          }
+        }
+      });
+    }
+  }, [countdown, gameCode, playerName]);
 
   // Fetch creator and role as soon as the component mounts
   useEffect(() => {
@@ -23,6 +53,21 @@ function Countdown() {
       }
     });
   }, [gameCode, playerName]);
+
+  useEffect(() => {
+    if (role === 'Imposter') {
+      const gameRef = doc(db, "games", gameCode);
+  
+      const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const gameData = docSnapshot.data();
+          setKillList(gameData.killList || []);  // Update kill list in real-time
+        }
+      });
+  
+      return () => unsubscribe();  // Clean up listener on component unmount
+    }
+  }, [role, gameCode]);
 
   // Countdown logic
   useEffect(() => {
@@ -60,15 +105,99 @@ function Countdown() {
         const gameData = docSnapshot.data();
 
         // If gameStarted is false, navigate everyone back to the lobby
-        if (!gameData.gameStarted) {
+        if (!gameData.gameStarted && !gameData.gameEnded) {
           console.log("Game round ended. Navigating back to lobby...");
           navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
         }
+
+        if (gameData.gameEnded) {
+            const result = gameData.roles[playerName] === 'Crewmate' && gameData.completedTasks
+              ? 'win'
+              : 'lose';
+    
+            // Navigate all players to the Game Over screen
+            navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+          }
       }
     });
 
     return () => unsubscribe();  // Clean up the listener when the component unmounts
   }, [gameCode, navigate, playerName, isCreator]);
+
+  const toggleCrewmateDeath = async (crewmate) => {
+    const updatedKillList = killList.includes(crewmate)
+      ? killList.filter((name) => name !== crewmate)  // Uncheck if already dead
+      : [...killList, crewmate];  // Add crewmate to kill list
+  
+    setKillList(updatedKillList);
+  
+    // Update Firestore with new kill list
+    const gameRef = doc(db, "games", gameCode);
+    await updateDoc(gameRef, {
+      killList: updatedKillList
+    });
+
+    await checkIfAllKillsCompleted(updatedKillList);
+  };
+
+  const checkIfAllKillsCompleted = async (updatedKillList) => {
+    const gameRef = doc(db, "games", gameCode);
+    const gameData = (await getDoc(gameRef)).data();
+    const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
+    const allKillsCompleted = updatedKillList.length === crewmates.length;
+  
+    if (allKillsCompleted) {
+        // Navigate to the Game Over screen and pass lose state
+        navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
+        await updateDoc(gameRef, { gameEnded: true });
+      }
+  };
+
+  const toggleTaskCompletion = (task) => {
+    const updatedCompletedTasks = completedTasks.includes(task)
+      ? completedTasks.filter((t) => t !== task)
+      : [...completedTasks, task];
+  
+    setCompletedTasks(updatedCompletedTasks);
+  
+    // Update completed tasks for the current player in Firestore
+    const gameRef = doc(db, "games", gameCode);
+    updateDoc(gameRef, {
+      [`completedTasks.${playerName}`]: updatedCompletedTasks  // Store each crewmate's completed tasks
+    });
+  
+    // Check if all crewmates have completed their tasks
+    checkIfAllTasksCompleted();
+  };
+
+  const checkIfAllTasksCompleted = async () => {
+    const gameRef = doc(db, "games", gameCode);
+    const gameData = (await getDoc(gameRef)).data();
+    
+    // Get all crewmates
+    const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
+    
+    // Check if all crewmates have completed all their assigned tasks
+    const allTasksCompleted = crewmates.every((crewmate) => {
+      const assignedTasks = gameData.assignedTasks[crewmate] || [];
+      const completedTasks = gameData.completedTasks?.[crewmate] || [];
+      
+      // Ensure all assigned tasks are completed by this crewmate
+      return assignedTasks.length === completedTasks.length;
+    });
+  
+    // If all crewmates have completed their tasks, end the game
+    if (allTasksCompleted) {
+      // Mark game as ended in Firestore and navigate to the game over screen
+      await updateDoc(gameRef, { gameEnded: true });
+  
+      // Navigate to the Game Over screen for all players
+      navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'win' } });
+    }
+  };
+  
+  
+  
 
   // End the game round
   const endGameRound = async () => {
@@ -92,6 +221,46 @@ function Countdown() {
         <h2>{playerName}</h2>
       </div>
       <h2>{role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}</h2>
+
+      {role === 'Crewmate' && (
+        <div>
+            <h3>Your Tasks</h3>
+            <ul>
+            {tasks.map((task, index) => (
+                <li key={index}>
+                <label>
+                    <input
+                    type="checkbox"
+                    checked={completedTasks.includes(task)}
+                    onChange={() => toggleTaskCompletion(task)}
+                    />
+                    {task}
+                </label>
+                </li>
+            ))}
+            </ul>
+        </div>
+      )}
+
+    {role === 'Imposter' && (
+    <div>
+        <h3>Kill List</h3>
+        <ul>
+        {crewmates.map((crewmate, index) => (
+            <li key={index}>
+            <label>
+                <input
+                type="checkbox"
+                checked={killList.includes(crewmate)}
+                onChange={() => toggleCrewmateDeath(crewmate)}
+                />
+                {crewmate}
+            </label>
+            </li>
+        ))}
+        </ul>
+    </div>
+    )}
       
       {isCreator && (
         <button onClick={endGameRound}>

@@ -4,6 +4,7 @@ import Home from './Home';
 import GameLobby from './GameLobby';
 import JoinGame from './JoinGame';
 import Countdown from './Countdown';
+import GameOver from './GameOver';
 import './App.css';
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route path="/join" element={<JoinGame />} />
         <Route path="/lobby/:gameCode" element={<GameLobby />} />
         <Route path="/countdown/:gameCode" element={<Countdown />} />
+        <Route path="/gameover/:gameCode" element={<GameOver />} />
       </Routes>
     </Router>
   );
