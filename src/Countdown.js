@@ -88,6 +88,9 @@ function Countdown() {
 
   return (
     <div>
+      <div className="player-name">
+        <h2>{playerName}</h2>
+      </div>
       <h2>{role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}</h2>
       
       {isCreator && (

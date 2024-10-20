@@ -126,6 +126,10 @@ function GameLobby() {
 
   return (
     <div className="game-lobby">
+      <div className="player-name">
+        <h2>{playerName}</h2>
+      </div>
+
       <h2>Game Lobby</h2>
       <p>Game Code: <strong>{gameCode}</strong></p>
       <div>
