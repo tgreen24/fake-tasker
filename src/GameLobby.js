@@ -10,6 +10,7 @@ function GameLobby() {
   const [players, setPlayers] = useState([]);
   const [isCreator, setIsCreator] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [imposterCount, setImposterCount] = useState(1);  // Default to 1 imposter
   const playerName = location.state?.playerName || '';  // Get player name from location state
   const maxPlayers = 15;
 
@@ -84,22 +85,26 @@ function GameLobby() {
 
   // Assign roles and update gameStarted flag
   const startGame = async () => {
-    if (players.length > 0) {
+    if (players.length > 1 && imposterCount <= players.length - 1) {  // Ensure valid imposter count
       const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
-      const imposter = shuffledPlayers[0];
-      const crewmates = shuffledPlayers.slice(1);
+      const imposters = shuffledPlayers.slice(0, imposterCount);
+      const crewmates = shuffledPlayers.slice(imposterCount);
 
       const roles = {};
-      roles[imposter] = 'Imposter';
+      imposters.forEach((imposter) => {
+        roles[imposter] = 'Imposter';
+      });
       crewmates.forEach((crewmate) => {
         roles[crewmate] = 'Crewmate';
       });
 
       const gameRef = doc(db, "games", gameCode);
-      await updateDoc(gameRef, { roles, gameStarted: true });  // Mark game as started
+      await updateDoc(gameRef, { roles, gameStarted: true });  // Mark game as started with reshuffled roles
 
       // Pass isCreator to Countdown screen
       navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
+    } else {
+      alert("Invalid imposter count. Must have at least 1 crewmate.");
     }
   };
 
@@ -134,12 +139,30 @@ function GameLobby() {
 
       {isCreator && (
         <div>
-          <button onClick={startGame} disabled={players.length === 0}>
+          <button onClick={startGame} disabled={players.length < 2}>
             Start Game
           </button>
           <button onClick={finishGame} disabled={players.length === 0}>
             Finish Game and Delete Data
           </button>
+
+          {players.length > 5 ? (
+            <div>
+              <label>
+                Number of Imposters:
+                <select
+                  value={imposterCount}
+                  onChange={(e) => setImposterCount(Number(e.target.value))}
+                >
+                  {[1, 2, 3].map((num) => (
+                    <option key={num} value={num}>{num}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : (
+            <p>There will be 1 imposter.</p>
+          )}
         </div>
       )}
     </div>
