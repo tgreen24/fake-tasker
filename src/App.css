@@ -60,3 +60,270 @@ li {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+.countdown-screen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: url('https://unsplash.com/photos/Spjmf2WfVOU') no-repeat center center;
+  background-size: cover;
+}
+
+.background-overlay {
+  background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent overlay */
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.countdown-timer {
+  font-size: 5rem;
+  color: #fff;
+  text-align: center;
+  animation: scale-up 1s ease-in-out infinite;
+}
+
+@keyframes scale-up {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.game-content {
+  text-align: center;
+  color: #fff;
+}
+
+.role-announcement {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 2rem;
+}
+
+.role-announcement.Crewmate {
+  color: #2ecc71;
+}
+
+.role-announcement.Imposter {
+  color: #e74c3c;
+}
+
+.task-list,
+.kill-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin: 20px 0;
+}
+
+.task-item,
+.kill-item {
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.task-item.selected,
+.kill-item.selected {
+  background-color: rgba(0, 150, 136, 0.3);
+  border: 2px solid #009688;
+}
+
+.task-item label {
+  display: flex;
+  align-items: center;
+  font-size: 1.25rem;
+}
+
+.buttons {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.emergency-meeting-btn, .end-game-btn {
+  padding: 1rem 2rem;
+  font-size: 1.25rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.emergency-meeting-btn {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.end-game-btn {
+  background-color: #3498db;
+  color: white;
+}
+
+.voting-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin: 20px 0;
+  width: 80%;
+}
+
+.voting-page {
+  background-color: #6c6a6a;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.voting-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.voting-card {
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Style for the selected card */
+.voting-card.selected {
+  background-color: rgba(0, 150, 136, 0.3);
+  border: 2px solid #009688;
+}
+
+/* Button styling */
+.vote-button {
+  padding: 10px 20px;
+  background-color: #009688;
+  border: none;
+  border-radius: 5px;
+  color: white;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 20px;
+}
+
+.vote-button:hover {
+  background-color: #00796b;
+}
+
+.submit-vote-button {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  font-size: 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  margin-top: 20px;
+}
+
+.submit-vote-button:hover {
+  background-color: #d32f2f;
+}
+
+.voting-result {
+  font-size: 24px;
+  font-weight: bold;
+  margin-top: 20px;
+}
+
+
+/* Background and overlay */
+.gameover-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: linear-gradient(to bottom right, #4c4c6d, #1e1e2f);
+  color: #fff;
+}
+
+.background-overlay {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0px 0px 30px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+}
+
+/* Player name styling */
+.player-name h2 {
+  font-size: 2rem;
+  margin-bottom: 20px;
+  font-weight: bold;
+  color: #867a7a;
+}
+
+/* Winning team styling */
+.winning-team {
+  font-size: 3rem;
+  font-weight: bold;
+  color: #28a745; /* For Crew Win */
+  margin-bottom: 20px;
+}
+
+.player-result {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin-bottom: 40px;
+}
+
+/* End game button */
+.end-game-btn {
+  background: #ff4747;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.end-game-btn:hover {
+  background: #ff2222;
+}
+
+@media (max-width: 768px) {
+  .background-overlay {
+    padding: 20px;
+  }
+
+  .winning-team {
+    font-size: 2rem;
+  }
+
+  .player-result {
+    font-size: 1.2rem;
+  }
+
+  .end-game-btn {
+    font-size: 1rem;
+    padding: 10px 20px;
+  }
+}

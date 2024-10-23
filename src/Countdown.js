@@ -233,70 +233,79 @@ function Countdown() {
     }
   };
 
-  if (countdown > 0) {
-    return <div>Game starting in... {countdown}</div>;
-  }
-
-  return (
-    <div>
-      <div className="player-name">
-        <h2>{playerName}</h2>
+  return <div className="countdown-screen">
+  <div className="background-overlay">
+    {countdown > 0 ? (
+      <div className="countdown">
+        <h1 className="countdown-timer">Game starting in... {countdown}</h1>
       </div>
-      <h2>{role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}</h2>
+    ) : (
+      <div className="game-content">
+        <div className="player-info">
+          <h2 className="player-name">{playerName}</h2>
+        </div>
 
-      {role === 'Crewmate' && (
-        <div>
+        <h2 className={`role-announcement ${role}`}>
+          {role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}
+        </h2>
+
+        {role === 'Crewmate' && (
+          <div className="task-list">
             <h3>Your Tasks</h3>
             <ul>
-            {tasks.map((task, index) => (
-                <li key={index}>
-                <label>
+              {tasks.map((task, index) => (
+                <li key={index} className="task-item">
+                  <label>
                     <input
-                    type="checkbox"
-                    checked={completedTasks.includes(task)}
-                    onChange={() => toggleTaskCompletion(task)}
+                      type="checkbox"
+                      checked={completedTasks.includes(task)}
+                      onChange={() => toggleTaskCompletion(task)}
                     />
                     {task}
-                </label>
+                  </label>
                 </li>
-            ))}
+              ))}
             </ul>
+          </div>
+        )}
+
+        {role === 'Imposter' && (
+          <div className="kill-list">
+            <h3>Kill List</h3>
+            <ul>
+              {crewmates.map((crewmate, index) => (
+                <li key={index} className="kill-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={killList.includes(crewmate)}
+                      onChange={() => toggleCrewmateDeath(crewmate)}
+                    />
+                    {crewmate}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="buttons">
+          {role && (
+            <button className="emergency-meeting-btn" onClick={callEmergencyMeeting}>
+              🚨 Emergency Meeting
+            </button>
+          )}
+
+          {isCreator && (
+            <button className="end-game-btn" onClick={endGameRound}>
+              End Game Round
+            </button>
+          )}
         </div>
-      )}
-
-    {role === 'Imposter' && (
-    <div>
-        <h3>Kill List</h3>
-        <ul>
-        {crewmates.map((crewmate, index) => (
-            <li key={index}>
-            <label>
-                <input
-                type="checkbox"
-                checked={killList.includes(crewmate)}
-                onChange={() => toggleCrewmateDeath(crewmate)}
-                />
-                {crewmate}
-            </label>
-            </li>
-        ))}
-        </ul>
-    </div>
+      </div>
     )}
-
-    {role && (
-    <button onClick={callEmergencyMeeting}>
-        Emergency Meeting
-    </button>
-    )}
-      
-      {isCreator && (
-        <button onClick={endGameRound}>
-          End Game Round
-        </button>
-      )}
-    </div>
-  );
+  </div>
+</div>
 }
 
 export default Countdown;

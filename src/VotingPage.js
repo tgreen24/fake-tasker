@@ -195,48 +195,37 @@ const submitVote = () => {
   }, [gameCode, navigate, playerName, votingEnded]);
 
   return (
-    <div>
-      <h2>Emergency Meeting called by {meetingCaller}</h2>  {/* Show who called the meeting */}
+    <div className="voting-page">
+      <h2>Emergency Meeting called by {meetingCaller}</h2>
       {!votingEnded ? (
         !voteSubmitted && (
           <>
-            <ul>
+            <div className="voting-grid">
               {players.map((player, index) => (
-                <li key={index}>
-                  <label>
-                    <input
-                      type="radio"
-                      name="vote"
-                      value={player}
-                      checked={selectedVote === player}
-                      onChange={() => setSelectedVote(player)}
-                    />
-                    {player}
-                  </label>
-                </li>
+                <div 
+                  key={index} 
+                  className={`voting-card ${selectedVote === player ? 'selected' : ''}`}
+                  onClick={() => setSelectedVote(player)}
+                >
+                  <span>{player}</span>
+                </div>
               ))}
-            </ul>
-            <label>
-              <input
-                type="radio"
-                name="vote"
-                value="skip"
-                checked={selectedVote === 'skip'}
-                onChange={() => setSelectedVote('skip')}
-              />
-              Skip Vote
-            </label>
-            <br />
-            <button onClick={submitVote}>Submit Vote</button>
+            </div>
+            <div 
+              className={`voting-card ${selectedVote === 'skip' ? 'selected' : ''}`}
+              onClick={() => setSelectedVote('skip')}
+            >
+              <span>Skip Vote</span>
+            </div>
+            <button className="submit-vote-button" onClick={submitVote}>Submit Vote</button>
           </>
         )
       ) : (
-        <div>
-          <h3>{votingResult}</h3>  {/* Display the result after voting ends */}
+        <div className="voting-result">
+          <h3>{votingResult}</h3>
         </div>
       )}
 
-      {/* Display the vote confirmation */}
       {voteConfirmation && <p>{voteConfirmation}</p>}
     </div>
   );

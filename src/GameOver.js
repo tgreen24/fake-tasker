@@ -93,16 +93,26 @@ function GameOver() {
   };
 
   return (
-    <div>
-      <div className="player-name">
-        <h2>{playerName}</h2>
+    <div className="gameover-screen">
+      <div className="background-overlay">
+        <div className="gameover-content">
+          <div className="player-name">
+            <h2>{playerName}</h2>
+          </div>
+
+          <h1 className="winning-team">{winningTeam}</h1>
+
+          <h2 className="player-result">{playerResult}</h2>
+
+          {isCreator && (
+            <button className="end-game-btn" onClick={endGameAndReturnToLobby}>
+              End Game and Return to Lobby
+            </button>
+          )}
+        </div>
       </div>
-      <h1>{winningTeam}</h1>
-      <h2>{playerResult}</h2>
-      {isCreator && (
-        <button onClick={endGameAndReturnToLobby}>End Game and Return to Lobby</button>
-      )}
     </div>
+
   );
 }
 
