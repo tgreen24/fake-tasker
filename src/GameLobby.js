@@ -107,7 +107,9 @@ const addTask = () => {
 
       await updateDoc(gameRef, {
         killList: [],
-        completedTasks: deleteField()  // Remove the entire completedTasks field from Firestore
+        completedTasks: deleteField(),  // Remove the entire completedTasks field from Firestore
+        winner: deleteField(),
+        meetingCalled: false
        });
     
       // Now clear completed tasks for all players by reinitializing the field

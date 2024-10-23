@@ -29,6 +29,7 @@ function Countdown() {
           // If player is a crewmate, load their assigned tasks
           if (playerRole === 'Crewmate') {
             setTasks(gameData.assignedTasks[playerName] || []);
+            setCompletedTasks(gameData.completedTasks?.[playerName] || []);
           }
 
           // Snippet 2: Imposter logic
@@ -68,6 +69,24 @@ function Countdown() {
       return () => unsubscribe();  // Clean up listener on component unmount
     }
   }, [role, gameCode]);
+
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+    
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+        
+        // Check if an emergency meeting was called
+        if (gameData.meetingCalled) {
+          // Navigate to the voting page for all players
+          navigate(`/voting/${gameCode}`, { state: { playerName } });
+        }
+      }
+    });
+  
+    return () => unsubscribe();  // Clean up the listener
+  }, [gameCode, navigate, playerName]);
 
   // Countdown logic
   useEffect(() => {
@@ -144,7 +163,7 @@ function Countdown() {
     const gameRef = doc(db, "games", gameCode);
     const gameData = (await getDoc(gameRef)).data();
     const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
-    const allKillsCompleted = updatedKillList.length === crewmates.length;
+    const allKillsCompleted = updatedKillList.length === crewmates.length - 1;
   
     if (allKillsCompleted) {
         // Navigate to the Game Over screen and pass lose state
@@ -196,7 +215,10 @@ function Countdown() {
     }
   };
   
-  
+  const callEmergencyMeeting = async () => {
+    const gameRef = doc(db, "games", gameCode);
+    await updateDoc(gameRef, { meetingCalled: true, meetingCaller: playerName });
+  };
   
 
   // End the game round
@@ -260,6 +282,12 @@ function Countdown() {
         ))}
         </ul>
     </div>
+    )}
+
+    {role && (
+    <button onClick={callEmergencyMeeting}>
+        Emergency Meeting
+    </button>
     )}
       
       {isCreator && (

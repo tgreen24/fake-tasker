@@ -5,6 +5,7 @@ import GameLobby from './GameLobby';
 import JoinGame from './JoinGame';
 import Countdown from './Countdown';
 import GameOver from './GameOver';
+import VotingPage from './VotingPage';
 import './App.css';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
         <Route path="/lobby/:gameCode" element={<GameLobby />} />
         <Route path="/countdown/:gameCode" element={<Countdown />} />
         <Route path="/gameover/:gameCode" element={<GameOver />} />
+        <Route path="/voting/:gameCode" element={<VotingPage />} />
       </Routes>
     </Router>
   );

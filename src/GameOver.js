@@ -29,10 +29,12 @@ function GameOver() {
         return assignedTasks.length === completedTasks.length;
       });
 
-      if (allCrewmatesCompletedTasks) {
+      // Check if all imposters have been voted out
+      const allImpostersVotedOut = imposters.every((imposter) => gameData.killList.includes(imposter));
+
+      if (allCrewmatesCompletedTasks || allImpostersVotedOut) {
         setWinningTeam('Crewmates Win');
-      } else if (gameData.killList.length === crewmates.length) {
-        // Imposters win if all crewmates are killed
+      } else {
         setWinningTeam('Imposters Win');
       }
 
