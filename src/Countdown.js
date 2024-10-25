@@ -16,6 +16,8 @@ function Countdown() {
   const [killList, setKillList] = useState([]);  // Imposter's kill list
   const [crewmates, setCrewmates] = useState([]);
   const [isDead, setIsDead] = useState(false);
+  const [totalTasks, setTotalTasks] = useState(100);
+  const [totalCompletedTasks, setTotalCompletedTasks] = useState(0);
 
   useEffect(() => {
     if (countdown === 0) {
@@ -88,6 +90,37 @@ function Countdown() {
   
     return () => unsubscribe();  // Clean up the listener
   }, [gameCode, navigate, playerName]);
+
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+    
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+        
+        // Get all crewmates
+        const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate');
+        setCrewmates(crewmatesList);
+        
+        // Calculate total assigned tasks for all crewmates
+        const combinedTasks = crewmatesList.reduce((total, crewmate) => {
+          return total + (gameData.assignedTasks?.[crewmate]?.length || 0);
+        }, 0);
+  
+        // Calculate total completed tasks for all crewmates
+        const completedTasks = crewmatesList.reduce((total, crewmate) => {
+          return total + (gameData.completedTasks?.[crewmate]?.length || 0);
+        }, 0);
+  
+        setTotalTasks(combinedTasks);
+        setTotalCompletedTasks(completedTasks);
+      }
+    });
+  
+    return () => unsubscribe();  // Clean up listener on component unmount
+  }, [gameCode]);
+  
+
 
   // Countdown logic
   useEffect(() => {
@@ -273,9 +306,9 @@ function Countdown() {
           <div className="progress-bar-container">
               <div 
                 className="progress-bar" 
-                style={{ width: `${(completedTasks.length / tasks.length) * 100}%` }}
+                style={{ width: `${(totalCompletedTasks / totalTasks) * 100}%` }}
               >
-                {Math.round((completedTasks.length / tasks.length) * 100)}%
+                {Math.round((totalCompletedTasks / totalTasks) * 100)}%
               </div>
             </div>
         </div>
