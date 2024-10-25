@@ -15,6 +15,7 @@ function Countdown() {
   const [completedTasks, setCompletedTasks] = useState([]);  // Completed tasks
   const [killList, setKillList] = useState([]);  // Imposter's kill list
   const [crewmates, setCrewmates] = useState([]);
+  const [isDead, setIsDead] = useState(false);
 
   useEffect(() => {
     if (countdown === 0) {
@@ -25,6 +26,7 @@ function Countdown() {
           const playerRole = gameData.roles[playerName];
           setRole(playerRole);
           setIsCreator(gameData.creator === playerName);
+          setIsDead(gameData.killList?.includes(playerName));
   
           // If player is a crewmate, load their assigned tasks
           if (playerRole === 'Crewmate') {
@@ -56,18 +58,17 @@ function Countdown() {
   }, [gameCode, playerName]);
 
   useEffect(() => {
-    if (role === 'Imposter') {
-      const gameRef = doc(db, "games", gameCode);
+    const gameRef = doc(db, "games", gameCode);
   
       const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
         if (docSnapshot.exists()) {
           const gameData = docSnapshot.data();
           setKillList(gameData.killList || []);  // Update kill list in real-time
+          setIsDead(gameData.killList?.includes(playerName));
         }
       });
   
       return () => unsubscribe();  // Clean up listener on component unmount
-    }
   }, [role, gameCode]);
 
   useEffect(() => {
@@ -246,8 +247,12 @@ function Countdown() {
         </div>
 
         <h2 className={`role-announcement ${role}`}>
-          {role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}
-        </h2>
+              {isDead
+                ? `You are a Dead ${role}`
+                : role === 'Imposter'
+                ? 'You are the Imposter!'
+                : 'You are a Crewmate!'}
+            </h2>
 
         {role === 'Crewmate' && (
           <div>
@@ -265,10 +270,18 @@ function Countdown() {
               ))}
             </ul>
           </div>
+          <div className="progress-bar-container">
+              <div 
+                className="progress-bar" 
+                style={{ width: `${(completedTasks.length / tasks.length) * 100}%` }}
+              >
+                {Math.round((completedTasks.length / tasks.length) * 100)}%
+              </div>
+            </div>
         </div>
         )}
 
-        {role === 'Imposter' && (
+        {role === 'Imposter' && !isDead && (
           <div>
             <h3>Kill List</h3>
             <div className="kill-list">
@@ -287,8 +300,8 @@ function Countdown() {
         )}
 
         <div className="buttons">
-          {role && (
-            <button className="emergency-meeting-btn" onClick={callEmergencyMeeting}>
+          {role && !isDead && (
+            <button className="emergency-meeting-btn" onClick={callEmergencyMeeting} disabled={isDead}>
               🚨 Emergency Meeting
             </button>
           )}

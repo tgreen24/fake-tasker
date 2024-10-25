@@ -3,6 +3,16 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { doc, getDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
 import { db } from './firebase';  // Firestore config
 
+function DeadPlayersList({ deadPlayers }) {
+  if (deadPlayers.length === 0) return
+  return (
+    <div className="dead-players-list">
+      <h3>Dead Players</h3>
+      <p className="dead-player">{deadPlayers.join(', ')}</p>
+    </div>
+  );
+}
+
 function VotingPage() {
   const { gameCode } = useParams();
   const location = useLocation();
@@ -17,6 +27,7 @@ function VotingPage() {
   const [votingEnded, setVotingEnded] = useState(false);
   const [meetingCaller, setMeetingCaller] = useState('');
   const [displayedResult, setDisplayedResult] = useState(''); 
+  const [deadPlayers, setDeadPlayers] = useState([]);
 
   useEffect(() => {
     if (votingResult) {
@@ -61,6 +72,7 @@ function VotingPage() {
         const gameData = docSnapshot.data();
         setPlayers(gameData.players || []);  // Load the list of players for voting
         setMeetingCaller(gameData.meetingCaller); 
+        setDeadPlayers(gameData.killList || []);
       }
     });
   }, [gameCode]);
@@ -75,11 +87,13 @@ function VotingPage() {
         const currentVotes = gameData.votes || {};
         setVotes(currentVotes); // Update the local votes state
 
+        const alivePlayers = players.filter((player) => !deadPlayers.includes(player));
+
         // Count the number of players who have voted
-        const votesCast = Object.keys(currentVotes).length;
+        const aliveVotesCast = Object.keys(currentVotes).filter((voter) => alivePlayers.includes(voter)).length;
 
         // If all players have voted, end the voting process
-        if (votesCast === players.length && voteSubmitted) {
+        if (aliveVotesCast > 0 && aliveVotesCast === alivePlayers.length) {
           handleVoteEnd(currentVotes);  // Call handleVoteEnd to process the votes
         }
       }
@@ -125,7 +139,7 @@ function VotingPage() {
             resultMessage = `${votedOutPlayer} was not an Imposter and was voted out.`;
         }
         await updateDoc(gameRef, {
-            killList: arrayUnion(votedOutPlayer)  // Mark the player as dead
+          killList: arrayUnion(votedOutPlayer)  // Mark the player as dead
         });
     }
     setVotingResult(resultMessage);
@@ -207,6 +221,8 @@ const submitVote = () => {
     return () => unsubscribe();
   }, [gameCode, navigate, playerName, votingEnded]);
 
+  const isAlive = !deadPlayers.includes(playerName);
+
   return (
     <div className="voting-page">
     <div className="voting-card-container">
@@ -215,7 +231,9 @@ const submitVote = () => {
         !voteSubmitted && (
           <>
             <div className="voting-grid">
-              {players.map((player, index) => (
+              {players
+              .filter((player) => !deadPlayers.includes(player))
+              .map((player, index) => (
                 <div 
                   key={index} 
                   className={`voting-card ${selectedVote === player ? 'selected' : ''}`}
@@ -231,7 +249,10 @@ const submitVote = () => {
             >
               <span>Skip Vote</span>
             </div>
-            <button className="submit-vote-button" onClick={submitVote}>Submit Vote</button>
+            {isAlive && ( // Show submit button only if player is alive
+              <button className="submit-vote-button" onClick={submitVote}>Submit Vote</button>
+            )}
+            <DeadPlayersList deadPlayers={deadPlayers} />
           </>
         )
       ) : (
