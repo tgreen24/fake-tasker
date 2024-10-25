@@ -13,7 +13,7 @@ body, .home, .game-lobby, .join-game-container, .gameover-screen, .voting-page, 
 }
 
 /* Card Containers */
-.home-card, .game-lobby, .join-game-card, .background-overlay {
+.home-card, .join-game-card, .background-overlay {
   background: rgba(255, 255, 255, 0.85);
   border-radius: 10px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -38,24 +38,6 @@ body, .home, .game-lobby, .join-game-container, .gameover-screen, .voting-page, 
   gap: 10px;
   margin-top: 15px;
   padding: 10px;
-}
-
-.player-card {
-  background: #ffffff;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  font-weight: bold;
-}
-
-.task-section {
-  background: #ffffff;
-  padding: 15px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  width: 100%;
-  margin-top: 15px;
 }
 
 /* Headings and Typography */
@@ -227,3 +209,96 @@ button:hover, .vote-button:hover, .submit-vote-button:hover, .join-button:hover 
     padding: 20px;
   }
 }
+
+/* Game Lobby Layout */
+.game-lobby {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  max-width: 800px;
+  width: 90%;
+}
+
+.lobby-header {
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.lobby-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+.player-grid, .task-section {
+  background: #f0f0f0;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 10px;
+}
+
+.player-card, .task-item {
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  font-weight: bold;
+}
+
+.player-card.highlight {
+  color: #28a745; /* Green text color for highlighted player */
+  font-weight: bold;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.start-game-btn {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.end-game-btn {
+  background-color: #f44336;
+  color: #fff;
+}
+
+.task-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.task-input input {
+  flex: 1;
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+}
+
+.imposter-select {
+  margin-top: 15px;
+}
+
+/* Responsive Layout for Smaller Screens */
+@media (max-width: 768px) {
+  .lobby-content {
+    grid-template-columns: 1fr;
+  }
+}
+
