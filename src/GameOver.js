@@ -100,7 +100,9 @@ function GameOver() {
             <h2>{playerName}</h2>
           </div>
 
-          <h1 className="winning-team">{winningTeam}</h1>
+          <h1 className={`winning-team ${winningTeam === 'Imposters Win' ? 'imposters-win' : 'crewmates-win'}`}>
+            {winningTeam}
+          </h1>
 
           <h2 className="player-result">{playerResult}</h2>
 

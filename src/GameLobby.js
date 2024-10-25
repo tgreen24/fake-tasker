@@ -168,67 +168,64 @@ const addTask = () => {
 
   return (
     <div className="game-lobby">
-      <div className="player-name">
-        <h2>{playerName}</h2>
-      </div>
+  <div className="player-name">
+    <h2>{playerName}</h2>
+  </div>
 
-      <h2>Game Lobby</h2>
-      <p>Game Code: <strong>{gameCode}</strong></p>
-      <div>
-        <h3>Players ({players.length}/{maxPlayers}):</h3>
+  <h2>Game Lobby</h2>
+  <div className="game-code">Game Code: <strong>{gameCode}</strong></div>
+
+  <div className="players-list">
+    {players.map((player, index) => (
+      <div key={index} className="player-card">{player}</div>
+    ))}
+  </div>
+
+  {isCreator && (
+    <div className="creator-controls">
+      <button onClick={startGame} disabled={players.length < 2} className="start-game-btn">
+        Start Game
+      </button>
+      <button onClick={finishGame} disabled={players.length === 0} className="end-game-btn">
+        Finish Game and Delete Data
+      </button>
+
+      {players.length > 3 ? (
+        <div className="imposter-select">
+          <label>Number of Imposters:</label>
+          <select
+            value={imposterCount}
+            onChange={(e) => setImposterCount(Number(e.target.value))}
+          >
+            {[1, 2, 3].map((num) => (
+              <option key={num} value={num}>{num}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <p>There will be 1 imposter.</p>
+      )}
+
+      <div className="task-section">
+        <h3>Tasks</h3>
         <ul>
-          {players.map((player, index) => (
-            <li key={index}>{player}</li>
+          {tasks.map((task, index) => (
+            <li key={index}>{task}</li>
           ))}
         </ul>
-      </div>
-
-      {isCreator && (
-        <div>
-          <button onClick={startGame} disabled={players.length < 2}>
-            Start Game
-          </button>
-          <button onClick={finishGame} disabled={players.length === 0}>
-            Finish Game and Delete Data
-          </button>
-
-          {players.length > 3 ? (
-            <div>
-              <label>
-                Number of Imposters:
-                <select
-                  value={imposterCount}
-                  onChange={(e) => setImposterCount(Number(e.target.value))}
-                >
-                  {[1, 2, 3].map((num) => (
-                    <option key={num} value={num}>{num}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : (
-            <p>There will be 1 imposter.</p>
-          )}
-
-        <div>
-            <h3>Tasks</h3>
-            <ul>
-                {tasks.map((task, index) => (
-                <li key={index}>{task}</li>
-                ))}
-            </ul>
-            <input
-                type="text"
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                placeholder="Enter new task"
-            />
-            <button onClick={addTask}>Add Task</button>
-            </div>
-
+        <div className="task-input">
+          <input
+            type="text"
+            value={newTask}
+            onChange={(e) => setNewTask(e.target.value)}
+            placeholder="Enter new task"
+          />
+          <button onClick={addTask}>Add Task</button>
         </div>
-      )}
+      </div>
     </div>
+  )}
+</div>
   );
 }
 

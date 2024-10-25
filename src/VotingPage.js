@@ -16,6 +16,19 @@ function VotingPage() {
   const [votingResult, setVotingResult] = useState('');  // State to store the voting result
   const [votingEnded, setVotingEnded] = useState(false);
   const [meetingCaller, setMeetingCaller] = useState('');
+  const [displayedResult, setDisplayedResult] = useState(''); 
+
+  useEffect(() => {
+    if (votingResult) {
+      setDisplayedResult(''); // Reset the displayed result
+  
+      for (let i = 0; i < votingResult.length; i++) {
+        setTimeout(() => {
+          setDisplayedResult((prev) => prev + votingResult[i]);
+        }, i * 100); // Adjust the timing as needed (100 ms per character)
+      }
+    }
+  }, [votingResult]);
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
@@ -196,6 +209,7 @@ const submitVote = () => {
 
   return (
     <div className="voting-page">
+    <div className="voting-card-container">
       <h2>Emergency Meeting called by {meetingCaller}</h2>
       {!votingEnded ? (
         !voteSubmitted && (
@@ -222,12 +236,12 @@ const submitVote = () => {
         )
       ) : (
         <div className="voting-result">
-          <h3>{votingResult}</h3>
+          <h3>{displayedResult}</h3>
         </div>
       )}
-
       {voteConfirmation && <p>{voteConfirmation}</p>}
     </div>
+  </div>
   );
 }
 

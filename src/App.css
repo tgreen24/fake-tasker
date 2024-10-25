@@ -1,329 +1,229 @@
-/* Center the content for both Home and Game Lobby */
-.home, .game-lobby {
+/* Global Background */
+body, .home, .game-lobby, .join-game-container, .gameover-screen, .voting-page, .countdown-screen {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  height: 100vh;
+  justify-content: center;
+  min-height: 100vh;
   text-align: center;
+  background: linear-gradient(135deg, #007bff, #3a4a58); /* Consistent blue gradient background */
+  color: #333;
+  margin: 0;
+  font-family: Arial, sans-serif;
 }
 
-/* Style the player name input field */
-.name-input {
-  margin-bottom: 20px;  /* Space between the input and the buttons */
-  padding: 10px;
-  font-size: 16px;
-  width: 200px; /* Adjust the width of the input */
-  text-align: center; /* Center the text inside the input */
+/* Card Containers */
+.home-card, .game-lobby, .join-game-card, .background-overlay {
+  background: rgba(255, 255, 255, 0.85);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  max-width: 400px;
+  width: 90%;
+  color: #333;
 }
 
-/* Style buttons globally */
-button {
-  margin: 10px;
+.game-code {
+  background: #e0e0e0;
   padding: 10px 20px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-/* Styling for player list in Game Lobby */
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-
-/* Style individual list items */
-li {
-  font-size: 18px;
-  margin: 5px 0;
-}
-
-/* Loading spinner styles */
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  text-align: center;
-}
-
-.spinner {
-  border: 8px solid #f3f3f3;
-  border-top: 8px solid #3498db;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.countdown-screen {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: url('https://unsplash.com/photos/Spjmf2WfVOU') no-repeat center center;
-  background-size: cover;
-}
-
-.background-overlay {
-  background-color: rgba(0, 0, 0, 0.7); /* Semi-transparent overlay */
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.countdown-timer {
-  font-size: 5rem;
-  color: #fff;
-  text-align: center;
-  animation: scale-up 1s ease-in-out infinite;
-}
-
-@keyframes scale-up {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-}
-
-.game-content {
-  text-align: center;
-  color: #fff;
-}
-
-.role-announcement {
-  font-size: 2.5rem;
-  font-weight: bold;
-  margin-bottom: 2rem;
-}
-
-.role-announcement.Crewmate {
-  color: #2ecc71;
-}
-
-.role-announcement.Imposter {
-  color: #e74c3c;
-}
-
-.task-list,
-.kill-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
-  margin: 20px 0;
-}
-
-.task-item,
-.kill-item {
-  background-color: rgba(255, 255, 255, 0.2);
-  padding: 20px;
   border-radius: 8px;
+  margin: 12px 0;
+  font-size: 1.1em;
+  font-weight: bold;
+}
+
+.players-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 15px;
+  padding: 10px;
+}
+
+.player-card {
+  background: #ffffff;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   text-align: center;
+  font-weight: bold;
+}
+
+.task-section {
+  background: #ffffff;
+  padding: 15px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  margin-top: 15px;
+}
+
+/* Headings and Typography */
+h1, h2, h3 {
+  color: #333;
+  margin: 0 0 15px;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.6rem;
+}
+
+h3 {
+  font-size: 1.3rem;
+  color: #555;
+}
+
+/* Input Fields */
+.name-input, .join-input {
+  padding: 10px;
+  font-size: 1rem;
+  width: 90%;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+/* Buttons */
+button, .vote-button, .join-button {
+  background-color: #28a745;
+  padding: 10px;
+  font-size: 1rem;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
+  width: 100%;
   transition: background 0.3s ease;
+  margin-top: 10px;
 }
 
-.task-item.selected,
-.kill-item.selected {
-  background-color: rgba(0, 150, 136, 0.3);
-  border: 2px solid #009688;
+.submit-vote-button, .vote-button, .join-button { background-color: #007bff; }
+
+button:hover, .vote-button:hover, .submit-vote-button:hover, .join-button:hover {
+  opacity: 0.9;
 }
 
-.task-item label {
-  display: flex;
-  align-items: center;
-  font-size: 1.25rem;
-}
-
-.buttons {
-  display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.emergency-meeting-btn, .end-game-btn {
+/* Emergency Meeting Button */
+.emergency-meeting-btn {
+  background-color: #e74c3c; /* Red background */
+  color: #fff;
   padding: 1rem 2rem;
   font-size: 1.25rem;
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.3s ease;
 }
 
-.emergency-meeting-btn {
-  background-color: #e74c3c;
-  color: white;
-}
-
+/* End Game Button */
 .end-game-btn {
-  background-color: #3498db;
+  background-color: #3498db; /* Blue background */
   color: white;
-}
-
-.voting-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 15px;
-  margin: 20px 0;
-  width: 80%;
-}
-
-.voting-page {
-  background-color: #6c6a6a;
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-}
-
-.voting-options {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.voting-card {
-  background-color: rgba(255, 255, 255, 0.2);
-  padding: 20px;
-  border-radius: 8px;
-  text-align: center;
-  cursor: pointer;
-  transition: background 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-/* Style for the selected card */
-.voting-card.selected {
-  background-color: rgba(0, 150, 136, 0.3);
-  border: 2px solid #009688;
-}
-
-/* Button styling */
-.vote-button {
-  padding: 10px 20px;
-  background-color: #009688;
+  padding: 1rem 2rem;
+  font-size: 1.25rem;
   border: none;
-  border-radius: 5px;
-  color: white;
-  cursor: pointer;
-  font-size: 16px;
-  margin-top: 20px;
-}
-
-.vote-button:hover {
-  background-color: #00796b;
-}
-
-.submit-vote-button {
-  background-color: #f44336;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  font-size: 16px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.3s ease;
-  margin-top: 20px;
 }
 
-.submit-vote-button:hover {
-  background-color: #d32f2f;
+/* Countdown Timer */
+.countdown-timer {
+  font-size: 4rem;
+  animation: scale-up 1s ease-in-out infinite;
 }
 
-.voting-result {
-  font-size: 24px;
-  font-weight: bold;
-  margin-top: 20px;
+@keyframes scale-up {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
-
-/* Background and overlay */
-.gameover-screen {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: linear-gradient(to bottom right, #4c4c6d, #1e1e2f);
-  color: #fff;
-}
-
-.background-overlay {
-  background: rgba(0, 0, 0, 0.7);
-  padding: 40px;
+.voting-card-container {
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 30px;
   border-radius: 12px;
-  box-shadow: 0px 0px 30px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   text-align: center;
   max-width: 600px;
-  width: 100%;
+  width: 90%;
 }
 
-/* Player name styling */
-.player-name h2 {
-  font-size: 2rem;
-  margin-bottom: 20px;
-  font-weight: bold;
-  color: #867a7a;
-}
-
-/* Winning team styling */
-.winning-team {
-  font-size: 3rem;
-  font-weight: bold;
-  color: #28a745; /* For Crew Win */
-  margin-bottom: 20px;
-}
-
-.player-result {
-  font-size: 1.5rem;
-  font-weight: bold;
-  margin-bottom: 40px;
-}
-
-/* End game button */
-.end-game-btn {
-  background: #ff4747;
-  color: white;
-  padding: 12px 24px;
-  border: none;
+/* Voting and Task Lists */
+.voting-card, .task-item, .kill-item {
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  padding: 15px;
   border-radius: 8px;
-  font-size: 1.2rem;
+  text-align: center;
   cursor: pointer;
   transition: background 0.3s ease;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  color: #333;
+  margin-bottom: 10px;
 }
 
-.end-game-btn:hover {
-  background: #ff2222;
+.voting-card.selected, .task-item.selected, .kill-item.selected {
+  background-color: rgba(0, 150, 136, 0.3);
+  border: 2px solid #009688;
+  position: relative;
 }
 
+.voting-card.selected::after, .task-item.selected::after, .kill-item.selected::after {
+  content: '✔'; /* Unicode for checkmark */
+  font-size: 1.5rem;
+  color: #009688;
+  position: absolute;
+  top: 50%;
+  right: 10%;
+  transform: translate(-50%, -50%);
+}
+
+.task-list, .kill-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 15px;
+  margin: 20px 0;
+  width: 90%;
+  max-width: 600px;
+  justify-content: center;
+}
+
+/* Game Over and Winning Team */
+.winning-team {
+  font-size: 2.5rem;
+  font-weight: bold;
+}
+
+/* Red color for Imposters */
+.imposters-win {
+  color: #e74c3c;
+}
+
+/* Green color for Crewmates */
+.crewmates-win {
+  color: #28a745;
+}
+
+
+.player-result {
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-bottom: 30px;
+}
+
+/* Mobile Adjustments */
 @media (max-width: 768px) {
-  .background-overlay {
+  h1 { font-size: 1.8rem; }
+  h2 { font-size: 1.4rem; }
+  .countdown-timer { font-size: 3rem; }
+  .background-overlay, .home-card, .game-lobby, .join-game-card {
     padding: 20px;
-  }
-
-  .winning-team {
-    font-size: 2rem;
-  }
-
-  .player-result {
-    font-size: 1.2rem;
-  }
-
-  .end-game-btn {
-    font-size: 1rem;
-    padding: 10px 20px;
   }
 }

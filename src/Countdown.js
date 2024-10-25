@@ -250,43 +250,40 @@ function Countdown() {
         </h2>
 
         {role === 'Crewmate' && (
-          <div className="task-list">
+          <div>
             <h3>Your Tasks</h3>
+            <div className="task-list">
             <ul>
               {tasks.map((task, index) => (
-                <li key={index} className="task-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={completedTasks.includes(task)}
-                      onChange={() => toggleTaskCompletion(task)}
-                    />
-                    {task}
-                  </label>
-                </li>
+                <li 
+                key={index} 
+                className={`task-item ${completedTasks.includes(task) ? 'selected' : ''}`}
+                onClick={() => toggleTaskCompletion(task)}
+              >
+                {task}
+              </li>
               ))}
             </ul>
           </div>
+        </div>
         )}
 
         {role === 'Imposter' && (
-          <div className="kill-list">
+          <div>
             <h3>Kill List</h3>
-            <ul>
-              {crewmates.map((crewmate, index) => (
-                <li key={index} className="kill-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={killList.includes(crewmate)}
-                      onChange={() => toggleCrewmateDeath(crewmate)}
-                    />
-                    {crewmate}
-                  </label>
+            <div className="kill-list">
+              <ul>
+                {crewmates.map((crewmate, index) => (
+                  <li 
+                  key={index} 
+                  className={`kill-item ${killList.includes(crewmate) ? 'selected' : ''}`} 
+                  onClick={() => toggleCrewmateDeath(crewmate)}>
+                  <label>{crewmate}</label>
                 </li>
-              ))}
-            </ul>
-          </div>
+                ))}
+              </ul>
+            </div>
+            </div>
         )}
 
         <div className="buttons">

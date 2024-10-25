@@ -41,20 +41,22 @@ function JoinGame() {
   };
 
   return (
-    <div className="join-game">
-      <h2>Join a Game</h2>
-      <form onSubmit={handleJoinGame}>
-        <input
-          type="text"
-          placeholder="Enter game code"
-          value={gameCode}
-          onChange={(e) => setGameCode(e.target.value.toUpperCase())}
-          required
-        />
-        <button type="submit">Join Game</button>
-      </form>
-
-      {errorMessage && <p className="error">{errorMessage}</p>}
+    <div className="join-game-container">
+      <div className="join-game-card">
+        <h2>Join a Game</h2>
+        <form onSubmit={handleJoinGame} className="join-form">
+          <input
+            type="text"
+            placeholder="Enter game code"
+            value={gameCode}
+            onChange={(e) => setGameCode(e.target.value.toUpperCase())}
+            required
+            className="join-input"
+          />
+          <button type="submit" className="join-button">Join Game</button>
+        </form>
+        {errorMessage && <p className="error-message">{errorMessage}</p>}
+      </div>
     </div>
   );
 }

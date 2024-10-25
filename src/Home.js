@@ -33,21 +33,19 @@ function Home() {
 
   return (
     <div className="home">
-      <h1>Fake Tasker</h1>
-      <input
-        type="text"
-        placeholder="Enter your player name"
-        value={playerName}
-        onChange={(e) => setPlayerName(e.target.value)}
-        className="name-input"  // Add class for styling
-      />
-      <button onClick={handleCreateGame}>
-        Create Game
-      </button>
-      <button onClick={handleJoinGame}>
-        Join Game
-      </button>
-    </div>
+  <div className="home-card">
+    <h1>Fake Tasker</h1>
+    <input
+      type="text"
+      placeholder="Enter your player name"
+      value={playerName}
+      onChange={(e) => setPlayerName(e.target.value)}
+      className="name-input"
+    />
+    <button onClick={handleCreateGame}>Create Game</button>
+    <button className='join-button' onClick={handleJoinGame}>Join Game</button>
+  </div>
+</div>
   );
 }
 
