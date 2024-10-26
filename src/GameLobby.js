@@ -14,6 +14,7 @@ function GameLobby() {
   const [loading, setLoading] = useState(true);
   const [imposterCount, setImposterCount] = useState(1);  // Default to 1 imposter
   const playerName = location.state?.playerName || '';  // Get player name from location state
+  const [tasksPerCrewmate, setTasksPerCrewmate] = useState(3);
   const maxPlayers = 15;
 
   useEffect(() => {
@@ -138,7 +139,7 @@ const addTask = () => {
       // Assign tasks randomly to crewmates
       const assignedTasks = {};
       crewmates.forEach((crewmate) => {
-        assignedTasks[crewmate] = tasks.sort(() => Math.random() - 0.5).slice(0, 3);  // Each crewmate gets 3 random tasks
+        assignedTasks[crewmate] = tasks.sort(() => Math.random() - 0.5).slice(0, tasksPerCrewmate);  // Each crewmate gets 3 random tasks
       });  
 
       await updateDoc(gameRef, { roles, gameStarted: true, assignedTasks });  // Mark game as started with reshuffled roles
@@ -233,6 +234,18 @@ const addTask = () => {
         ) : (
           <p>There will be 1 imposter.</p>
         )}
+
+      <div className="task-count-selection">
+          <label>Number of Tasks per Crewmate:</label>
+          <select
+              value={tasksPerCrewmate}
+              onChange={(e) => setTasksPerCrewmate(Number(e.target.value))}
+            >
+              {[2, 3, 4, 5, 6].map((num) => (
+                <option key={num} value={num}>{num}</option>
+              ))}
+            </select>
+        </div>
       </div>
     )}
   </div>
