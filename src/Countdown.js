@@ -28,7 +28,8 @@ function Countdown() {
       getDoc(gameRef).then((docSnapshot) => {
         if (docSnapshot.exists()) {
           const gameData = docSnapshot.data();
-          const playerRole = gameData.roles[playerName];
+          const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
+          const playerRole = roles[playerName];
           setRole(playerRole);
           setIsCreator(gameData.creator === playerName);
           setIsDead(gameData.killList?.includes(playerName));
@@ -43,11 +44,11 @@ function Countdown() {
           // Snippet 2: Imposter logic
           if (playerRole === 'Imposter') {
             setKillList(gameData.killList || []);  // Set kill list for imposters
-            const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate').sort();
+            const crewmatesList = Object.keys(roles).filter(player => roles[player] === 'Crewmate').sort();
             setCrewmates(crewmatesList);  // Set the list of crewmates for imposters
 
-            const impostersList = Object.keys(gameData.roles)
-              .filter(player => gameData.roles[player] === 'Imposter' && player !== playerName)
+            const impostersList = Object.keys(roles)
+              .filter(player => roles[player] === 'Imposter' && player !== playerName)
               .sort();
             setFellowImposters(impostersList);
           }
@@ -63,7 +64,8 @@ function Countdown() {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
         setIsCreator(gameData.creator === playerName);  // Set if the player is the creator
-        setRole(gameData.roles[playerName]);  // Set the role of the player
+        const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
+        setRole(roles[playerName]);  // Set the role of the player
       }
     });
   }, [gameCode, playerName]);
@@ -106,10 +108,11 @@ function Countdown() {
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
+        const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
         
         // Get all crewmates
-        const crewmatesList = Object.keys(gameData.roles)
-          .filter(player => gameData.roles[player] === 'Crewmate')
+        const crewmatesList = Object.keys(roles)
+          .filter(player => roles[player] === 'Crewmate')
           .sort();  // Sort alphabetically by name
         setCrewmates(crewmatesList);
         
@@ -167,6 +170,7 @@ function Countdown() {
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
+        const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
 
         // If gameStarted is false, navigate everyone back to the lobby
         if (!gameData.gameStarted && !gameData.gameEnded) {
@@ -175,7 +179,7 @@ function Countdown() {
         }
 
         if (gameData.gameEnded) {
-            const result = gameData.roles[playerName] === 'Crewmate' && gameData.completedTasks
+            const result = roles[playerName] === 'Crewmate' && gameData.completedTasks
               ? 'win'
               : 'lose';
     
@@ -243,7 +247,8 @@ function Countdown() {
   const checkIfAllKillsCompleted = async (updatedKillList) => {
     const gameRef = doc(db, "games", gameCode);
     const gameData = (await getDoc(gameRef)).data();
-    const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
+    const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
+    const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
     const allKillsCompleted = updatedKillList.length === crewmates.length - 1;
   
     if (allKillsCompleted) {
@@ -273,9 +278,10 @@ function Countdown() {
   const checkIfAllTasksCompleted = async () => {
     const gameRef = doc(db, "games", gameCode);
     const gameData = (await getDoc(gameRef)).data();
+    const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
     
     // Get all crewmates
-    const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
+    const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
     
     // Check if all crewmates have completed all their assigned tasks
     const allTasksCompleted = crewmates.every((crewmate) => {
