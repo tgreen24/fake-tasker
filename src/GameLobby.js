@@ -25,19 +25,21 @@ function GameLobby() {
     if (playerName) {
       getDoc(gameRef).then((docSnapshot) => {
         if (docSnapshot.exists()) {
-          updateDoc(gameRef, {
-            players: arrayUnion(playerName)
-          });
           const gameData = docSnapshot.data();
           setIsCreator(gameData.creator === playerName);
           setImposterHistory(gameData.imposterHistory || {}); // Load imposter history
+          setImposterCount(gameData.imposterCount || 1); // Load imposter count from Firestore
+          updateDoc(gameRef, {
+            players: arrayUnion(playerName)
+          });
         } else {
           // Create the game document
           setDoc(gameRef, {
             players: [playerName],
             creator: playerName,
             gameStarted: false,
-            imposterHistory: {} // Initialize imposter history
+            imposterHistory: {}, // Initialize imposter history
+            imposterCount: 1 // Initialize imposter count
           });
           setIsCreator(true);
         }
@@ -278,9 +280,14 @@ function GameLobby() {
             <label>Number of Imposters:</label>
             <select
               value={imposterCount}
-              onChange={(e) => setImposterCount(Number(e.target.value))}
+              onChange={(e) => {
+                const newCount = Number(e.target.value);
+                setImposterCount(newCount);
+                const gameRef = doc(db, "games", gameCode);
+                updateDoc(gameRef, { imposterCount: newCount }); // Persist imposter count to Firestore
+              }}
             >
-              {[1, 2, 3].map((num) => (
+              {Array.from({ length: Math.max(1, Math.floor(players.length / 3)) }, (_, i) => i + 1).map((num) => (
                 <option key={num} value={num}>{num}</option>
               ))}
             </select>
