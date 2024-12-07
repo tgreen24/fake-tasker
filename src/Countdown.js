@@ -20,6 +20,7 @@ function Countdown() {
   const [totalCompletedTasks, setTotalCompletedTasks] = useState(0);
   const [killCooldown, setKillCooldown] = useState(0);
   const [cooldownTimer, setCooldownTimer] = useState(0);
+  const [fellowImposters, setFellowImposters] = useState([]); // Fellow imposters
 
   useEffect(() => {
     if (countdown === 0) {
@@ -44,6 +45,11 @@ function Countdown() {
             setKillList(gameData.killList || []);  // Set kill list for imposters
             const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate').sort();
             setCrewmates(crewmatesList);  // Set the list of crewmates for imposters
+
+            const impostersList = Object.keys(gameData.roles)
+              .filter(player => gameData.roles[player] === 'Imposter' && player !== playerName)
+              .sort();
+            setFellowImposters(impostersList);
           }
         }
       });
@@ -375,6 +381,9 @@ function Countdown() {
                     Cooldown: {cooldownTimer}s
                   </div>
                 )}
+                <div className="fellow-imposters">
+                <p>Other Imposters: {fellowImposters.join(', ')}</p>
+              </div>
             </div>
         )}
 
