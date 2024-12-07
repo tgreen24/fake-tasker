@@ -16,6 +16,7 @@ function GameLobby() {
   const playerName = location.state?.playerName || '';  // Get player name from location state
   const [tasksPerCrewmate, setTasksPerCrewmate] = useState(3);
   const maxPlayers = 15;
+  const [imposterHistory, setImposterHistory] = useState({}); // Track imposter history
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
@@ -29,12 +30,14 @@ function GameLobby() {
           });
           const gameData = docSnapshot.data();
           setIsCreator(gameData.creator === playerName);
+          setImposterHistory(gameData.imposterHistory || {}); // Load imposter history
         } else {
           // Create the game document
           setDoc(gameRef, {
             players: [playerName],
             creator: playerName,
-            gameStarted: false
+            gameStarted: false,
+            imposterHistory: {} // Initialize imposter history
           });
           setIsCreator(true);
         }
@@ -76,6 +79,7 @@ function GameLobby() {
         setPlayers(gameData.players || []);
         setTasks(gameData.tasks || []);
         setIsCreator(gameData.creator === playerName);
+        setImposterHistory(gameData.imposterHistory || {}); // Update imposter history
 
         // If the game has started and we're not already on the countdown screen
         if (gameData.gameStarted && !location.state?.onCountdownScreen) {
@@ -88,7 +92,7 @@ function GameLobby() {
   }, [gameCode, playerName, navigate, location.state]);
 
   // Add a new task to the list
-const addTask = () => {
+  const addTask = () => {
     if (newTask.trim() !== "") {
       const updatedTasks = [...tasks, newTask.trim()];
       setTasks(updatedTasks);
@@ -99,6 +103,56 @@ const addTask = () => {
       updateDoc(gameRef, { tasks: updatedTasks });
     }
   };
+
+  function shuffleArray(array) {
+    let currentIndex = array.length, randomIndex;
+  
+    // While there remain elements to shuffle...
+    while (currentIndex !== 0) {
+  
+      // Pick a remaining element...
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex--;
+  
+      // And swap it with the current element.
+      [array[currentIndex], array[randomIndex]] = [
+        array[randomIndex], array[currentIndex]];
+    }
+  
+    return array;
+  }
+
+  function calculateWeights(players, history) {
+    const maxImposterCount = Math.max(0, ...Object.values(history));
+    const weights = {};
+
+    players.forEach(player => {
+      const weight = maxImposterCount - (history[player] || 0) + 1; // +1 to avoid zero weight
+      weights[player] = weight;
+    });
+
+    return weights;
+  }
+
+  function selectImposters(players, weights, imposterCount) {
+    const weightedPlayers = [];
+
+    players.forEach(player => {
+      for (let i = 0; i < weights[player]; i++) {
+        weightedPlayers.push(player);
+      }
+    });
+
+    const shuffledWeightedPlayers = shuffleArray(weightedPlayers);
+    const selectedImposters = new Set();
+
+    while (selectedImposters.size < imposterCount && shuffledWeightedPlayers.length > 0) {
+      const candidate = shuffledWeightedPlayers.pop();
+      selectedImposters.add(candidate);
+    }
+
+    return Array.from(selectedImposters);
+  }
 
   // Assign roles and update gameStarted flag
   const startGame = async () => {
@@ -123,14 +177,14 @@ const addTask = () => {
         completedTasks: clearedCompletedTasks  // Reinitialize the completedTasks field in Firestore
       });
 
-          
-      const shuffledPlayers = [...players].sort(() => Math.random() - 0.5);
-      const imposters = shuffledPlayers.slice(0, imposterCount);
-      const crewmates = shuffledPlayers.slice(imposterCount);
+      const weights = calculateWeights(players, imposterHistory);
+      const imposters = selectImposters(players, weights, imposterCount);
+      const crewmates = players.filter(player => !imposters.includes(player));
 
       const roles = {};
       imposters.forEach((imposter) => {
         roles[imposter] = 'Imposter';
+        imposterHistory[imposter] = (imposterHistory[imposter] || 0) + 1; // Update history
       });
       crewmates.forEach((crewmate) => {
         roles[crewmate] = 'Crewmate';
@@ -139,10 +193,10 @@ const addTask = () => {
       // Assign tasks randomly to crewmates
       const assignedTasks = {};
       crewmates.forEach((crewmate) => {
-        assignedTasks[crewmate] = tasks.sort(() => Math.random() - 0.5).slice(0, tasksPerCrewmate);  // Each crewmate gets 3 random tasks
-      });  
+        assignedTasks[crewmate] = shuffleArray([...tasks]).slice(0, tasksPerCrewmate);  // Each crewmate gets 3 random tasks
+      });
 
-      await updateDoc(gameRef, { roles, gameStarted: true, assignedTasks });  // Mark game as started with reshuffled roles
+      await updateDoc(gameRef, { roles, gameStarted: true, assignedTasks, imposterHistory });  // Mark game as started with reshuffled roles
 
       // Pass isCreator to Countdown screen
       navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
