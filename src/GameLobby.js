@@ -17,6 +17,7 @@ function GameLobby() {
   const [tasksPerCrewmate, setTasksPerCrewmate] = useState(3);
   const maxPlayers = 25;
   const [imposterHistory, setImposterHistory] = useState({}); // Track imposter history
+  const [killCooldown, setKillCooldown] = useState(30); // Default cooldown in seconds
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
@@ -30,6 +31,7 @@ function GameLobby() {
           setImposterHistory(gameData.imposterHistory || {}); // Load imposter history
           setImposterCount(gameData.imposterCount || 1); // Load imposter count from Firestore
           setTasksPerCrewmate(gameData.tasksPerCrewmate || 3); // Load tasks per crewmate from Firestore
+          setKillCooldown(gameData.killCooldown || 30); // Load kill cooldown from Firestore
           updateDoc(gameRef, {
             players: arrayUnion(playerName)
           });
@@ -41,7 +43,8 @@ function GameLobby() {
             gameStarted: false,
             imposterHistory: {}, // Initialize imposter history
             imposterCount: 1, // Initialize imposter count
-            tasksPerCrewmate: 3 // Initialize tasks per crewmate
+            tasksPerCrewmate: 3, // Initialize tasks per crewmate
+            killCooldown: 30 // Initialize kill cooldown
           });
           setIsCreator(true);
         }
@@ -297,6 +300,25 @@ function GameLobby() {
         ) : (
           <p>There will be 1 imposter.</p>
         )}
+
+        <div className="kill-cooldown-selection">
+          <label>Kill Cooldown (seconds):</label>
+          <select
+            value={killCooldown}
+            onChange={(e) => {
+              const newCooldown = Number(e.target.value);
+              setKillCooldown(newCooldown);
+              const gameRef = doc(db, "games", gameCode);
+              updateDoc(gameRef, { killCooldown: newCooldown }); // Persist kill cooldown to Firestore
+            }}
+          >
+            {[10, 15, 20, 25, 30].map((seconds) => (
+              <option key={seconds} value={seconds}>
+                {seconds} seconds
+              </option>
+            ))}
+          </select>
+        </div>
 
       <div className="task-count-selection">
           <label>Number of Tasks per Crewmate:</label>

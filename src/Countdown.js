@@ -18,6 +18,8 @@ function Countdown() {
   const [isDead, setIsDead] = useState(false);
   const [totalTasks, setTotalTasks] = useState(100);
   const [totalCompletedTasks, setTotalCompletedTasks] = useState(0);
+  const [killCooldown, setKillCooldown] = useState(0);
+  const [cooldownTimer, setCooldownTimer] = useState(0);
 
   useEffect(() => {
     if (countdown === 0) {
@@ -29,6 +31,7 @@ function Countdown() {
           setRole(playerRole);
           setIsCreator(gameData.creator === playerName);
           setIsDead(gameData.killList?.includes(playerName));
+          setKillCooldown(gameData.killCooldown || 30); // Load kill cooldown
   
           // If player is a crewmate, load their assigned tasks
           if (playerRole === 'Crewmate') {
@@ -180,10 +183,32 @@ function Countdown() {
   }, [gameCode, navigate, playerName, isCreator]);
 
   const toggleCrewmateDeath = async (crewmate) => {
-    const updatedKillList = killList.includes(crewmate)
-      ? killList.filter((name) => name !== crewmate)  // Uncheck if already dead
-      : [...killList, crewmate];  // Add crewmate to kill list
+    if (killList.includes(crewmate)) {
+      // If the crewmate is already in the kill list, remove them
+      const updatedKillList = killList.filter((name) => name !== crewmate);
+      setKillList(updatedKillList);
   
+      // Reset cooldown timer if the current kill was untoggled
+      if (cooldownTimer > 0) {
+        setCooldownTimer(0);
+      }
+  
+      // Update Firestore with the updated kill list
+      const gameRef = doc(db, "games", gameCode);
+      await updateDoc(gameRef, {
+        killList: updatedKillList
+      });
+  
+      return;
+    }
+  
+    if (cooldownTimer > 0) {
+      console.log("Kill cooldown active, cannot kill yet.");
+      return;
+    }
+  
+    // Add crewmate to kill list
+    const updatedKillList = [...killList, crewmate];
     setKillList(updatedKillList);
   
     // Update Firestore with new kill list
@@ -191,9 +216,23 @@ function Countdown() {
     await updateDoc(gameRef, {
       killList: updatedKillList
     });
-
+  
     await checkIfAllKillsCompleted(updatedKillList);
+  
+    // Start cooldown timer
+    setCooldownTimer(killCooldown);
   };
+
+  useEffect(() => {
+    if (cooldownTimer > 0) {
+      const timer = setInterval(() => {
+        setCooldownTimer((prev) => prev - 1);
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [cooldownTimer]);
+
 
   const checkIfAllKillsCompleted = async (updatedKillList) => {
     const gameRef = doc(db, "games", gameCode);
@@ -331,6 +370,11 @@ function Countdown() {
                 ))}
               </ul>
             </div>
+            {cooldownTimer > 0 && (
+                  <div className="cooldown-timer">
+                    Cooldown: {cooldownTimer}s
+                  </div>
+                )}
             </div>
         )}
 
