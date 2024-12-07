@@ -29,6 +29,7 @@ function GameLobby() {
           setIsCreator(gameData.creator === playerName);
           setImposterHistory(gameData.imposterHistory || {}); // Load imposter history
           setImposterCount(gameData.imposterCount || 1); // Load imposter count from Firestore
+          setTasksPerCrewmate(gameData.tasksPerCrewmate || 3); // Load tasks per crewmate from Firestore
           updateDoc(gameRef, {
             players: arrayUnion(playerName)
           });
@@ -39,7 +40,8 @@ function GameLobby() {
             creator: playerName,
             gameStarted: false,
             imposterHistory: {}, // Initialize imposter history
-            imposterCount: 1 // Initialize imposter count
+            imposterCount: 1, // Initialize imposter count
+            tasksPerCrewmate: 3 // Initialize tasks per crewmate
           });
           setIsCreator(true);
         }
@@ -300,9 +302,14 @@ function GameLobby() {
           <label>Number of Tasks per Crewmate:</label>
           <select
               value={tasksPerCrewmate}
-              onChange={(e) => setTasksPerCrewmate(Number(e.target.value))}
+              onChange={(e) => {
+                const newTaskCount = Number(e.target.value);
+                setTasksPerCrewmate(newTaskCount);
+                const gameRef = doc(db, "games", gameCode);
+                updateDoc(gameRef, { tasksPerCrewmate: newTaskCount }); // Persist tasks per crewmate to Firestore
+              }}
             >
-              {[2, 3, 4, 5, 6].map((num) => (
+              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                 <option key={num} value={num}>{num}</option>
               ))}
             </select>
