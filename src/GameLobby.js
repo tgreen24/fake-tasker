@@ -15,7 +15,7 @@ function GameLobby() {
   const [imposterCount, setImposterCount] = useState(1);  // Default to 1 imposter
   const playerName = location.state?.playerName || '';  // Get player name from location state
   const [tasksPerCrewmate, setTasksPerCrewmate] = useState(3);
-  const maxPlayers = 15;
+  const maxPlayers = 25;
   const [imposterHistory, setImposterHistory] = useState({}); // Track imposter history
 
   useEffect(() => {
@@ -231,7 +231,7 @@ function GameLobby() {
 
   <div className="lobby-content">
     <div className="players-list">
-      <h3>Players ({players.length}/15)</h3>
+      <h3>Players ({players.length}/{maxPlayers})</h3>
       <div className="player-grid">
       {players.map((player, index) => (
   <div

@@ -11,6 +11,7 @@ function JoinGame() {
   
   // Get the player name from the Home screen
   const playerName = location.state?.playerName || '';
+  const maxPlayers = 25; // Define max players here
 
   const handleJoinGame = async (e) => {
     e.preventDefault();
@@ -23,7 +24,16 @@ function JoinGame() {
       const gameDoc = await getDoc(gameRef);
 
       if (gameDoc.exists()) {
-        // If the game exists, add the player to the Firestore document
+        const gameData = gameDoc.data();
+        const currentPlayers = gameData.players || [];
+
+        // Check if the game is already full
+        if (currentPlayers.length >= maxPlayers) {
+          setErrorMessage("The game is full. Please try another game.");
+          return;
+        }
+
+        // If the game exists and isn't full, add the player to the Firestore document
         await updateDoc(gameRef, {
           players: arrayUnion(playerName)  // Add the player from the Home screen
         });
