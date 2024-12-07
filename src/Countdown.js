@@ -39,7 +39,7 @@ function Countdown() {
           // Snippet 2: Imposter logic
           if (playerRole === 'Imposter') {
             setKillList(gameData.killList || []);  // Set kill list for imposters
-            const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate');
+            const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate').sort();
             setCrewmates(crewmatesList);  // Set the list of crewmates for imposters
           }
         }
@@ -99,7 +99,9 @@ function Countdown() {
         const gameData = docSnapshot.data();
         
         // Get all crewmates
-        const crewmatesList = Object.keys(gameData.roles).filter(player => gameData.roles[player] === 'Crewmate');
+        const crewmatesList = Object.keys(gameData.roles)
+          .filter(player => gameData.roles[player] === 'Crewmate')
+          .sort();  // Sort alphabetically by name
         setCrewmates(crewmatesList);
         
         // Calculate total assigned tasks for all crewmates
