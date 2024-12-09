@@ -387,9 +387,11 @@ function Countdown() {
                     Cooldown: {cooldownTimer}s
                   </div>
                 )}
-                <div className="fellow-imposters">
-                <p>Other Imposters: {fellowImposters.join(', ')}</p>
-              </div>
+                {fellowImposters.length > 0 && (
+                    <div className="fellow-imposters">
+                      <p>Other Imposters: {fellowImposters.join(', ')}</p>
+                    </div>
+                  )}
             </div>
         )}
 
