@@ -28,6 +28,28 @@ function VotingPage() {
   const [meetingCaller, setMeetingCaller] = useState('');
   const [displayedResult, setDisplayedResult] = useState(''); 
   const [deadPlayers, setDeadPlayers] = useState([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedKillPlayer, setSelectedKillPlayer] = useState('');
+  const [role, setRole] = useState('');
+  const [roles, setRoles] = useState({});
+
+  let writeCount = 0;
+  const MAX_WRITES = 300;
+
+  function safeWrite(data) {
+    if (writeCount >= MAX_WRITES) {
+      console.warn("Max write limit reached, halting further writes.");
+      return;
+    }
+  
+    const gameRef = doc(db, "games", gameCode);
+    updateDoc(gameRef, data)
+      .then(() => {
+        writeCount++;
+        console.log(`Firestore updated: ${writeCount}`);
+      })
+      .catch((error) => console.error("Error updating Firestore:", error));
+  }
 
   useEffect(() => {
     if (votingResult) {
@@ -67,14 +89,18 @@ function VotingPage() {
   // Load players for voting
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
-    getDoc(gameRef).then((docSnapshot) => {
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
         setPlayers(gameData.players || []);  // Load the list of players for voting
         setMeetingCaller(gameData.meetingCaller); 
         setDeadPlayers(gameData.killList || []);
+        setRole(gameData.roles[playerName] || '');
+        setRoles(gameData.roles || {});
       }
     });
+
+    return () => unsubscribe();
   }, [gameCode]);
 
   // Listen for real-time updates of votes from Firestore
@@ -100,7 +126,7 @@ function VotingPage() {
     });
 
     return () => unsubscribe();
-  }, [gameCode, players.length, voteSubmitted]);
+  }, [gameCode, players.length, voteSubmitted, deadPlayers]);
 
   const handleVoteEnd = async (votes) => {
     const gameRef = doc(db, "games", gameCode);
@@ -138,15 +164,15 @@ function VotingPage() {
         } else {
             resultMessage = `${votedOutPlayer} was not an Imposter and was voted out.`;
         }
-        await updateDoc(gameRef, {
-          killList: arrayUnion(votedOutPlayer)  // Mark the player as dead
-        });
+        safeWrite({
+            killList: arrayUnion(votedOutPlayer)  // Mark the player as dead
+          });
     }
     setVotingResult(resultMessage);
     setVotingEnded(true);
 
     // Reset the meetingCalled flag and store voting result
-    await updateDoc(gameRef, { meetingCalled: false, votingResult: resultMessage });
+    safeWrite({ meetingCalled: false, votingResult: resultMessage });
 
     // Check if all imposters are gone or only one crewmate is left
     const remainingImposters = Object.keys(gameData.roles).filter(
@@ -162,21 +188,28 @@ function VotingPage() {
         console.log('All imposters are voted out. Crewmates win!');
         
         // Set the gameEnded flag and the winner
-        await updateDoc(gameRef, { gameEnded: true, winner: 'Crewmates' });
+        safeWrite({ gameEnded: true, winner: 'Crewmates' });
         
     } else if (remainingCrewmates <= 1) {
         // Log for debugging
         console.log('Less than 1 crewmate alive. Imposters win!');
         
         // Set the gameEnded flag and the winner
-        await updateDoc(gameRef, { gameEnded: true, winner: 'Imposters' });
+        safeWrite({ gameEnded: true, winner: 'Imposters' });
     } else {
         // Log the state for further debugging
         console.log('Game continues. Imposters remaining:', remainingImposters, 'Crewmates remaining:', remainingCrewmates);
     }
 };
 
+const handleMarkAsKilled = async () => {
+  if (!selectedKillPlayer) return;
 
+  safeWrite({killList: arrayUnion(selectedKillPlayer)});
+
+  setIsDialogOpen(false);
+  setSelectedKillPlayer('');
+};
 
 const submitVote = () => {
     if (!selectedVote) {
@@ -185,9 +218,7 @@ const submitVote = () => {
     }
 
     const gameRef = doc(db, "games", gameCode);
-    updateDoc(gameRef, {
-      [`votes.${playerName}`]: selectedVote  // Store each player's vote
-    });
+    safeWrite({[`votes.${playerName}`]: selectedVote});
 
     // Update the confirmation message based on the player's choice
     if (selectedVote === 'skip') {
@@ -198,7 +229,6 @@ const submitVote = () => {
 
     setVoteSubmitted(true);
 };
-
 
   // Ensure voting result is displayed to all players and everyone navigates back to the game
   useEffect(() => {
@@ -211,7 +241,7 @@ const submitVote = () => {
         // Show voting result for 5 seconds, then navigate back to the game
         if (!gameData.meetingCalled && votingEnded) {
           setTimeout(() => {
-            updateDoc(gameRef, { meetingCalled: false, votingResult: {}, votes: {} });
+            safeWrite({ meetingCalled: false, votingResult: {}, votes: {} });
             navigate(`/countdown/${gameCode}`, { state: { playerName } });
           }, 5000);
         }
@@ -249,10 +279,43 @@ const submitVote = () => {
             >
               <span>Skip Vote</span>
             </div>
+            {role === 'Imposter' && isAlive && (
+              <label className="voting-card" onClick={() => setIsDialogOpen(true)}>
+                <span>Kill Crewmate</span>
+              </label>
+            )}
             {isAlive && ( // Show submit button only if player is alive
               <button className="submit-vote-button" onClick={submitVote}>Submit Vote</button>
             )}
             <DeadPlayersList deadPlayers={deadPlayers} />
+            {isDialogOpen && (
+              <div className="dialog-overlay">
+                <div className="dialog">
+                  <h3>Select a player to mark as killed:</h3>
+                  <ul>
+                    {players
+                      .filter(player => 
+                        !deadPlayers.includes(player) && // Not already dead
+                        player !== playerName && // Not the current player
+                        roles[player] !== 'Imposter' // Not an imposter
+                      )
+                      .map((player, index) => (
+                        <li 
+                          key={index} 
+                          onClick={() => setSelectedKillPlayer(player)}
+                          className={`kill-item ${selectedKillPlayer === player ? 'selected' : ''}`}
+                        >
+                          <label>{player}</label>
+                        </li>
+                      ))}
+                  </ul>
+                  <button className='end-game-btn' onClick={() => handleMarkAsKilled()} disabled={!selectedKillPlayer}>
+                    Confirm Kill
+                  </button>
+                  <button className="submit-vote-button" onClick={() => setIsDialogOpen(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
           </>
         )
       ) : (
