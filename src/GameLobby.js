@@ -161,6 +161,38 @@ function GameLobby() {
     return Array.from(selectedImposters);
   }
 
+  function assignTasksEvenly(crewmates, tasks, tasksPerCrewmate) {
+    const assignedTasks = {};
+    const totalTasks = tasks.length;
+    const shuffledTasks = shuffleArray([...tasks]);
+  
+    // Initialize each crewmate's task list
+    crewmates.forEach(crewmate => {
+      assignedTasks[crewmate] = [];
+    });
+  
+    let taskIndex = 0;
+    let assignments = 0;
+  
+    // Distribute tasks ensuring no duplicates for a single crewmate
+    while (assignments < tasksPerCrewmate * crewmates.length) {
+      crewmates.forEach(crewmate => {
+        if (assignedTasks[crewmate].length < tasksPerCrewmate) {
+          // Check if the task is already assigned to this crewmate
+          while (assignedTasks[crewmate].includes(shuffledTasks[taskIndex % totalTasks])) {
+            taskIndex++;
+          }
+          assignedTasks[crewmate].push(shuffledTasks[taskIndex % totalTasks]);
+          taskIndex++;
+          assignments++;
+        }
+      });
+    }
+  
+    return assignedTasks;
+  }
+  
+
   // Assign roles and update gameStarted flag
   const startGame = async () => {
     if (players.length > 1 && imposterCount <= players.length - 1) {  // Ensure valid imposter count
@@ -198,10 +230,7 @@ function GameLobby() {
       });
 
       // Assign tasks randomly to crewmates
-      const assignedTasks = {};
-      crewmates.forEach((crewmate) => {
-        assignedTasks[crewmate] = shuffleArray([...tasks]).slice(0, tasksPerCrewmate);  // Each crewmate gets 3 random tasks
-      });
+      const assignedTasks = assignTasksEvenly(crewmates, tasks, tasksPerCrewmate);
 
       await updateDoc(gameRef, { roles, gameStarted: true, assignedTasks, imposterHistory });  // Mark game as started with reshuffled roles
 
@@ -323,18 +352,18 @@ function GameLobby() {
       <div className="task-count-selection">
           <label>Number of Tasks per Crewmate:</label>
           <select
-              value={tasksPerCrewmate}
-              onChange={(e) => {
-                const newTaskCount = Number(e.target.value);
-                setTasksPerCrewmate(newTaskCount);
-                const gameRef = doc(db, "games", gameCode);
-                updateDoc(gameRef, { tasksPerCrewmate: newTaskCount }); // Persist tasks per crewmate to Firestore
-              }}
-            >
-              {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                <option key={num} value={num}>{num}</option>
-              ))}
-            </select>
+            value={tasksPerCrewmate}
+            onChange={(e) => {
+              const newTaskCount = Number(e.target.value);
+              setTasksPerCrewmate(newTaskCount);
+              const gameRef = doc(db, "games", gameCode);
+              updateDoc(gameRef, { tasksPerCrewmate: newTaskCount }); // Persist tasks per crewmate to Firestore
+            }}
+          >
+            {Array.from({ length: Math.min(tasks.length, 10) }, (_, i) => i + 1).map((num) => (
+              <option key={num} value={num}>{num}</option>
+            ))}
+          </select>
         </div>
       </div>
     )}
