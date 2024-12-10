@@ -356,14 +356,6 @@ function Countdown() {
               ))}
             </ul>
           </div>
-          <div className="progress-bar-container">
-              <div 
-                className="progress-bar" 
-                style={{ width: `${(totalCompletedTasks / totalTasks) * 100}%` }}
-              >
-                {Math.round((totalCompletedTasks / totalTasks) * 100)}%
-              </div>
-            </div>
         </div>
         )}
 
@@ -394,6 +386,15 @@ function Countdown() {
                   )}
             </div>
         )}
+
+            <div className="progress-bar-container">
+              <div 
+                className="progress-bar" 
+                style={{ width: `${(totalCompletedTasks / totalTasks) * 100}%` }}
+              >
+                {Math.round((totalCompletedTasks / totalTasks) * 100)}%
+              </div>
+            </div>
 
         <div className="buttons">
           {role && !isDead && (
