@@ -292,15 +292,20 @@ function Countdown() {
   const checkIfAllKillsCompleted = async (updatedKillList) => {
     const gameRef = doc(db, "games", gameCode);
     const gameData = (await getDoc(gameRef)).data();
-    const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
-    const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
-    const allKillsCompleted = updatedKillList.length === crewmates.length - 1;
-  
-    if (allKillsCompleted) {
-        // Navigate to the Game Over screen and pass lose state
-        navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
-        await updateDoc(gameRef, { gameEnded: true });
-      }
+    const roles = gameData.roles || {};
+
+    const aliveCrewmates = Object.keys(roles).filter(
+      (player) => roles[player] === 'Crewmate' && !updatedKillList.includes(player)
+    );
+    const aliveImposters = Object.keys(roles).filter(
+      (player) => roles[player] === 'Imposter' && !updatedKillList.includes(player)
+    );
+
+    if (aliveImposters.length >= aliveCrewmates.length) {
+      // Navigate to the Game Over screen and pass lose state
+      navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
+      await updateDoc(gameRef, { gameEnded: true });
+    }
   };
 
   const toggleTaskCompletion = (task) => {
