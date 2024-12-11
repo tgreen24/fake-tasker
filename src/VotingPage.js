@@ -51,6 +51,29 @@ function VotingPage() {
       .catch((error) => console.error("Error updating Firestore:", error));
   }
 
+  // Listener for game end
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+        const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
+
+        if (gameData.gameEnded) {
+            const result = roles[playerName] === 'Crewmate' && gameData.completedTasks
+              ? 'win'
+              : 'lose';
+    
+            // Navigate all players to the Game Over screen
+            navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+          }
+      }
+    });
+
+    return () => unsubscribe();  // Clean up the listener when the component unmounts
+  }, [gameCode, navigate, playerName]);
+
   useEffect(() => {
     if (votingResult) {
       setDisplayedResult(''); // Reset the displayed result
@@ -202,13 +225,39 @@ function VotingPage() {
     }
 };
 
+const checkIfAllKillsCompleted = async (updatedKillList) => {
+  const gameRef = doc(db, "games", gameCode);
+  const gameData = (await getDoc(gameRef)).data();
+  const roles = gameData.roles || {};
+
+  const aliveCrewmates = Object.keys(roles).filter(
+    (player) => roles[player] === 'Crewmate' && !updatedKillList.includes(player)
+  );
+  const aliveImposters = Object.keys(roles).filter(
+    (player) => roles[player] === 'Imposter' && !updatedKillList.includes(player)
+  );
+
+  if (aliveImposters.length >= aliveCrewmates.length) {
+    // Navigate to the Game Over screen and pass lose state
+    navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
+    safeWrite({ gameEnded: true });
+  }
+};
+
 const handleMarkAsKilled = async () => {
   if (!selectedKillPlayer) return;
 
-  safeWrite({killList: arrayUnion(selectedKillPlayer)});
+  const gameRef = doc(db, "games", gameCode);
+  const gameData = (await getDoc(gameRef)).data();
+  const currentKillList = gameData.killList || [];
+  const updatedKillList = [...currentKillList, selectedKillPlayer];
+
+
+  safeWrite({killList: updatedKillList});
 
   setIsDialogOpen(false);
   setSelectedKillPlayer('');
+  checkIfAllKillsCompleted(updatedKillList)
 };
 
 const submitVote = () => {
