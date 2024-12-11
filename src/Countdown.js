@@ -21,6 +21,12 @@ function Countdown() {
   const [killCooldown, setKillCooldown] = useState(0);
   const [cooldownTimer, setCooldownTimer] = useState(0);
   const [fellowImposters, setFellowImposters] = useState([]); // Fellow imposters
+  const [isSabotageDialogOpen, setIsSabotageDialogOpen] = useState(false);
+  const [sabotageCooldown, setSabotageCooldown] = useState(0);
+  const [tasksBlocked, setTasksBlocked] = useState(false);
+  const [sabotagingImposter, setSabotagingImposter] = useState('')
+  const [sabotageActive, setSabotageActive] = useState(false);
+  const [sabotagedPlayer, setSabotagedPlayer] = useState('');
 
   useEffect(() => {
     if (countdown === 0) {
@@ -93,6 +99,7 @@ function Countdown() {
         
         // Check if an emergency meeting was called
         if (gameData.meetingCalled) {
+          resetSabotage();
           // Navigate to the voting page for all players
           navigate(`/voting/${gameCode}`, { state: { playerName } });
         }
@@ -148,6 +155,34 @@ function Countdown() {
 
     return () => clearInterval(timer);  // Clean up the timer on component unmount
   }, [countdown]);
+
+  useEffect(() => {
+    const gameRef = doc(db, "games", gameCode);
+  
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const gameData = docSnapshot.data();
+        const { sabotageActive, sabotagedPlayer, sabotageType, sabotagingImposter } = gameData;
+
+        setSabotageActive(sabotageActive || false);
+        setSabotagedPlayer(sabotagedPlayer || '');
+  
+        // Handle sabotage notification for the sabotaged player
+        if (sabotageActive && sabotagedPlayer === playerName && sabotageType === 'FindMe') {
+          console.log(`You have been sabotaged! Find the imposter to resume tasks.`);
+          // Logic to block tasks for the sabotaged player
+          setTasksBlocked(true);
+          setSabotagingImposter(sabotagingImposter);
+        } else {
+          // Reset task block if sabotage is resolved
+          setTasksBlocked(false);
+          setSabotagingImposter('');
+        }
+      }
+    });
+  
+    return () => unsubscribe(); // Clean up listener on component unmount
+  }, [gameCode, playerName]);
 
   // Listener for game deletion
   useEffect(() => {
@@ -234,6 +269,16 @@ function Countdown() {
   };
 
   useEffect(() => {
+    if (sabotageCooldown > 0) {
+      const timer = setInterval(() => {
+        setSabotageCooldown((prev) => prev - 1);
+      }, 1000);
+  
+      return () => clearInterval(timer);
+    }
+  }, [sabotageCooldown]);
+
+  useEffect(() => {
     if (cooldownTimer > 0) {
       const timer = setInterval(() => {
         setCooldownTimer((prev) => prev - 1);
@@ -259,6 +304,11 @@ function Countdown() {
   };
 
   const toggleTaskCompletion = (task) => {
+    if (tasksBlocked) {
+      console.log("Tasks are blocked due to sabotage. Find the imposter to resume.");
+      return;
+    }
+
     const updatedCompletedTasks = completedTasks.includes(task)
       ? completedTasks.filter((t) => t !== task)
       : [...completedTasks, task];
@@ -306,7 +356,47 @@ function Countdown() {
     const gameRef = doc(db, "games", gameCode);
     await updateDoc(gameRef, { meetingCalled: true, meetingCaller: playerName });
   };
+
+  const initiateFindMeSabotage = async (crewmate) => {
+    if (sabotageCooldown > 0) {
+      alert("Sabotage cooldown active, cannot sabotage yet.");
+      return;
+    }
   
+    const gameRef = doc(db, "games", gameCode);
+    try {
+      await updateDoc(gameRef, {
+        sabotageActive: true,
+        sabotagedPlayer: crewmate,
+        sabotageType: 'FindMe',
+        sabotagingImposter: playerName
+      });
+      console.log(`Crewmate ${crewmate} has been sabotaged.`);
+    } catch (error) {
+      console.error("Error initiating sabotage:", error);
+    }
+  
+    setIsSabotageDialogOpen(false);
+  };
+
+  const resetSabotage = async () => {
+    const gameRef = doc(db, "games", gameCode);
+    try {
+      await updateDoc(gameRef, {
+        sabotageActive: false,
+        sabotagedPlayer: null,
+        sabotagingImposter: null
+      });
+      console.log("Sabotage reset due to emergency meeting.");
+    } catch (error) {
+      console.error("Error resetting sabotage:", error);
+    }
+  };
+  
+  const handleSabotageReset = async () => {
+    resetSabotage();
+    setSabotageCooldown(120);
+  }
 
   // End the game round
   const endGameRound = async () => {
@@ -340,7 +430,7 @@ function Countdown() {
                 : 'You are a Crewmate!'}
             </h2>
 
-        {role === 'Crewmate' && (
+        {role === 'Crewmate' && !tasksBlocked && (
           <div>
             <h3>Your Tasks</h3>
             <div className="task-list">
@@ -356,6 +446,13 @@ function Countdown() {
               ))}
             </ul>
           </div>
+        </div>
+        )}
+
+      {role === 'Crewmate' && tasksBlocked && (
+          <div>
+            <h3>You have been sabotaged</h3>
+            <p>Find {sabotagingImposter} to resume your tasks!</p>
         </div>
         )}
 
@@ -387,6 +484,43 @@ function Countdown() {
             </div>
         )}
 
+        {role === 'Imposter' && isDead && !sabotageActive && (
+          <div>
+            <button className="end-game-btn" onClick={() => setIsSabotageDialogOpen(true)}>
+              Initiate Sabotage
+            </button>
+            {isSabotageDialogOpen && (
+                <div className="dialog-overlay">
+                  <div className="dialog">
+                    <h3>Select a player to sabotage:</h3>
+                    <ul>
+                      {crewmates.map((crewmate, index) => (
+                        <li className='kill-item' key={index} onClick={() => initiateFindMeSabotage(crewmate)}>
+                          <label className="sabotage-option-btn">{crewmate}</label>
+                        </li>
+                      ))}
+                    </ul>
+                    <button className='end-game-btn' onClick={() => setIsSabotageDialogOpen(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              {sabotageCooldown > 0 && (
+                <div className="sabotage-cooldown">
+                  Sabotage Cooldown: {sabotageCooldown}s
+                </div>
+              )}
+          </div>
+        )}
+
+        {role === 'Imposter' && isDead && sabotageActive && (
+          <div>
+            <p>Hide in one place and wait for {sabotagedPlayer} to find you. Once they do, press the button below.</p>
+            <button className="reset-sabotage-btn" onClick={handleSabotageReset}>
+              {sabotagedPlayer} Found Me
+            </button>
+          </div>
+        )}
+
             <div className="progress-bar-container">
               <div 
                 className="progress-bar" 
@@ -397,7 +531,7 @@ function Countdown() {
             </div>
 
         <div className="buttons">
-          {role && !isDead && (
+          {role && !isDead && !tasksBlocked && (
             <button className="emergency-meeting-btn" onClick={callEmergencyMeeting} disabled={isDead}>
               🚨 Emergency Meeting
             </button>
