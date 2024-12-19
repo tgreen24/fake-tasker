@@ -204,10 +204,7 @@ function GameLobby() {
         completedTasks: deleteField(),  // Remove the entire completedTasks field from Firestore
         winner: deleteField(),
         meetingCalled: false,
-        sabotageActive: deleteField(),
-        sabotageType: deleteField(),
-        sabotagedPlayer: deleteField(),
-        sabotagingImposter: deleteField()
+        sabotages: deleteField()
        });
     
       // Now clear completed tasks for all players by reinitializing the field

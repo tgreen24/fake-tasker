@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { db } from './firebase';  // Firestore config
-import { doc, getDoc, updateDoc, onSnapshot } from "firebase/firestore";  // Firestore functions
+import { doc, getDoc, updateDoc, onSnapshot, deleteField } from "firebase/firestore";  // Firestore functions
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -162,21 +162,27 @@ function Countdown() {
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
       if (docSnapshot.exists()) {
         const gameData = docSnapshot.data();
-        const { sabotageActive, sabotagedPlayer, sabotageType, sabotagingImposter } = gameData;
-
-        setSabotageActive(sabotageActive || false);
-        setSabotagedPlayer(sabotagedPlayer || '');
+        const allSabotages = gameData.sabotages || {};
   
-        // Handle sabotage notification for the sabotaged player
-        if (sabotageActive && sabotagedPlayer === playerName && sabotageType === 'FindMe') {
+        // Find if the current player is being sabotaged
+        const currentPlayerSabotageEntry = Object.entries(allSabotages).find(
+          ([imposterName, sabotage]) => 
+            (sabotage.sabotagedPlayer === playerName) ||
+            (imposterName === playerName)
+        );
+  
+        if (currentPlayerSabotageEntry) {
+          const [imposterName, currentPlayerSabotage] = currentPlayerSabotageEntry;
           console.log(`You have been sabotaged! Find the imposter to resume tasks.`);
-          // Logic to block tasks for the sabotaged player
-          setTasksBlocked(true);
-          setSabotagingImposter(sabotagingImposter);
+          setTasksBlocked(currentPlayerSabotage.sabotagedPlayer === playerName);
+          setSabotagingImposter(imposterName);
+          setSabotageActive(true);
+          setSabotagedPlayer(currentPlayerSabotage.sabotagedPlayer);
         } else {
-          // Reset task block if sabotage is resolved
           setTasksBlocked(false);
           setSabotagingImposter('');
+          setSabotageActive(false);
+          setSabotagedPlayer('');
         }
       }
     });
@@ -371,28 +377,25 @@ function Countdown() {
     const gameRef = doc(db, "games", gameCode);
     try {
       await updateDoc(gameRef, {
-        sabotageActive: true,
-        sabotagedPlayer: crewmate,
-        sabotageType: 'FindMe',
-        sabotagingImposter: playerName
+        [`sabotages.${playerName}`]: {
+          sabotagedPlayer: crewmate,
+        }
       });
-      console.log(`Crewmate ${crewmate} has been sabotaged.`);
+      console.log(`Crewmate ${crewmate} has been sabotaged by ${playerName}.`);
     } catch (error) {
       console.error("Error initiating sabotage:", error);
     }
   
     setIsSabotageDialogOpen(false);
   };
-
+  
   const resetSabotage = async () => {
     const gameRef = doc(db, "games", gameCode);
     try {
       await updateDoc(gameRef, {
-        sabotageActive: false,
-        sabotagedPlayer: null,
-        sabotagingImposter: null
+        [`sabotages.${playerName}`]: deleteField() // Remove the sabotage entry entirely
       });
-      console.log("Sabotage reset due to emergency meeting.");
+      console.log("Sabotage reset for imposter.");
     } catch (error) {
       console.error("Error resetting sabotage:", error);
     }
@@ -492,7 +495,7 @@ function Countdown() {
         {role === 'Imposter' && isDead && !sabotageActive && (
           <div>
             <button className="end-game-btn" onClick={() => setIsSabotageDialogOpen(true)}>
-              Initiate Sabotage
+              Sabotage
             </button>
             {isSabotageDialogOpen && (
                 <div className="dialog-overlay">
