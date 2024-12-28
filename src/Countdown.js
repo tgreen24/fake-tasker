@@ -27,6 +27,7 @@ function Countdown() {
   const [sabotagingImposter, setSabotagingImposter] = useState('')
   const [sabotageActive, setSabotageActive] = useState(false);
   const [sabotagedPlayer, setSabotagedPlayer] = useState('');
+  const [eligibleCrewmates, setEligibleCrewmates] = useState([]);
 
   useEffect(() => {
     if (countdown === 0) {
@@ -62,6 +63,29 @@ function Countdown() {
       });
     }
   }, [countdown, gameCode, playerName]);
+
+  // Fetch eligible crewmates when the dialog opens
+  useEffect(() => {
+    if (isSabotageDialogOpen) {
+      const fetchEligibleCrewmates = async () => {
+        const gameRef = doc(db, "games", gameCode);
+        const gameData = (await getDoc(gameRef)).data();
+
+        const eligible = crewmates.filter(crewmate => {
+          const assignedTasks = gameData.assignedTasks?.[crewmate] || [];
+          const completedTasks = gameData.completedTasks?.[crewmate] || [];
+          const isBeingSabotaged = Object.values(gameData.sabotages || {}).some(
+            sabotage => sabotage.sabotagedPlayer === crewmate
+          );
+          return assignedTasks.length > completedTasks.length && !isBeingSabotaged;
+        });
+
+        setEligibleCrewmates(eligible);
+      };
+
+      fetchEligibleCrewmates();
+    }
+  }, [isSabotageDialogOpen, crewmates, gameCode]);
 
   // Fetch creator and role as soon as the component mounts
   useEffect(() => {
@@ -502,7 +526,7 @@ function Countdown() {
                   <div className="dialog">
                     <h3>Select a player to sabotage:</h3>
                     <ul>
-                      {crewmates.map((crewmate, index) => (
+                      {eligibleCrewmates.map((crewmate, index) => (
                         <li className='kill-item' key={index} onClick={() => initiateFindMeSabotage(crewmate)}>
                           <label className="sabotage-option-btn">{crewmate}</label>
                         </li>
