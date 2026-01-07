@@ -100,6 +100,55 @@ function Countdown() {
     });
   }, [gameCode, playerName]);
 
+  // Navigation sync: Check game state on mount and when page becomes visible
+  useEffect(() => {
+    const syncNavigationState = async () => {
+      if (!gameCode || !playerName) return;
+
+      const gameRef = doc(db, "games", gameCode);
+      const docSnapshot = await getDoc(gameRef);
+
+      if (!docSnapshot.exists()) {
+        // Game deleted, go home
+        navigate("/");
+        return;
+      }
+
+      const gameData = docSnapshot.data();
+
+      // Check if we should be on a different screen
+      if (gameData.meetingCalled) {
+        // Should be on voting page
+        navigate(`/voting/${gameCode}`, { state: { playerName } });
+      } else if (gameData.gameEnded) {
+        // Should be on game over page
+        const roles = gameData.roles || {};
+        const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
+        navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+      } else if (!gameData.gameStarted) {
+        // Should be back in lobby
+        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: false } });
+      }
+    };
+
+    // Sync on mount
+    syncNavigationState();
+
+    // Sync when page becomes visible (user returns from backgrounding)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[Countdown] Page foregrounded, syncing navigation state');
+        syncNavigationState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [gameCode, playerName, navigate]);
+
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
   

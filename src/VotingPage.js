@@ -64,7 +64,7 @@ function VotingPage() {
             const result = roles[playerName] === 'Crewmate' && gameData.completedTasks
               ? 'win'
               : 'lose';
-    
+
             // Navigate all players to the Game Over screen
             navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
           }
@@ -73,6 +73,55 @@ function VotingPage() {
 
     return () => unsubscribe();  // Clean up the listener when the component unmounts
   }, [gameCode, navigate, playerName]);
+
+  // Navigation sync: Check game state on mount and when page becomes visible
+  useEffect(() => {
+    const syncNavigationState = async () => {
+      if (!gameCode || !playerName) return;
+
+      const gameRef = doc(db, "games", gameCode);
+      const docSnapshot = await getDoc(gameRef);
+
+      if (!docSnapshot.exists()) {
+        // Game deleted, go home
+        navigate("/");
+        return;
+      }
+
+      const gameData = docSnapshot.data();
+
+      // Check if we should be on a different screen
+      if (gameData.gameEnded) {
+        // Should be on game over page
+        const roles = gameData.roles || {};
+        const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
+        navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+      } else if (!gameData.gameStarted) {
+        // Should be back in lobby
+        navigate(`/lobby/${gameCode}`, { state: { playerName, gameStarted: false } });
+      } else if (!gameData.meetingCalled && !votingEnded) {
+        // Meeting ended, should be back in countdown
+        navigate(`/countdown/${gameCode}`, { state: { playerName } });
+      }
+    };
+
+    // Sync on mount
+    syncNavigationState();
+
+    // Sync when page becomes visible (user returns from backgrounding)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[VotingPage] Page foregrounded, syncing navigation state');
+        syncNavigationState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [gameCode, playerName, navigate, votingEnded]);
 
   useEffect(() => {
     if (votingResult) {

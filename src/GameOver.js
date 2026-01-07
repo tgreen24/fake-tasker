@@ -58,11 +58,58 @@ function GameOver() {
           console.log("Game round ended. Navigating back to lobby...");
           navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
         }
-    
+
      }
     });
     return () => unsubscribe();  // Clean up the listener when the component unmounts
   }, [gameCode, navigate, playerName, isCreator]);
+
+  // Navigation sync: Check game state on mount and when page becomes visible
+  useEffect(() => {
+    const syncNavigationState = async () => {
+      if (!gameCode || !playerName) return;
+
+      const gameRef = doc(db, "games", gameCode);
+      const docSnapshot = await getDoc(gameRef);
+
+      if (!docSnapshot.exists()) {
+        // Game deleted, go home
+        navigate("/");
+        return;
+      }
+
+      const gameData = docSnapshot.data();
+
+      // Check if we should be on a different screen
+      if (!gameData.gameStarted && !gameData.gameEnded) {
+        // Should be back in lobby
+        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
+      } else if (gameData.gameStarted && !gameData.gameEnded) {
+        // Game is still running, should be in countdown
+        navigate(`/countdown/${gameCode}`, { state: { playerName } });
+      } else if (gameData.meetingCalled) {
+        // Meeting called, should be on voting page
+        navigate(`/voting/${gameCode}`, { state: { playerName } });
+      }
+    };
+
+    // Sync on mount
+    syncNavigationState();
+
+    // Sync when page becomes visible (user returns from backgrounding)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[GameOver] Page foregrounded, syncing navigation state');
+        syncNavigationState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [gameCode, playerName, navigate, isCreator]);
 
   // Set the player result based on the winning team
   useEffect(() => {

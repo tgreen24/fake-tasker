@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { db, realtimeDb, ref, onDisconnect, set, remove } from './firebase';  // Import Realtime Database functions
-import { doc, setDoc, updateDoc, arrayUnion, arrayRemove, getDoc, onSnapshot, deleteDoc, deleteField } from "firebase/firestore";  // Firestore functions
+import { db } from './firebase';  // Import Firestore
+import { doc, setDoc, updateDoc, arrayRemove, getDoc, onSnapshot, deleteDoc, deleteField } from "firebase/firestore";  // Firestore functions
 
 function GameLobby() {
   const { gameCode } = useParams();
@@ -21,10 +21,9 @@ function GameLobby() {
 
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
-    const playerRef = ref(realtimeDb, `games/${gameCode}/players/${playerName}`);
-    
+
     if (playerName) {
-      getDoc(gameRef).then((docSnapshot) => {
+      getDoc(gameRef).then(async (docSnapshot) => {
         if (docSnapshot.exists()) {
           const gameData = docSnapshot.data();
           setIsCreator(gameData.creator === playerName);
@@ -32,12 +31,9 @@ function GameLobby() {
           setImposterCount(gameData.imposterCount || 1); // Load imposter count from Firestore
           setTasksPerCrewmate(gameData.tasksPerCrewmate || 3); // Load tasks per crewmate from Firestore
           setKillCooldown(gameData.killCooldown || 30); // Load kill cooldown from Firestore
-          updateDoc(gameRef, {
-            players: arrayUnion(playerName)
-          });
         } else {
           // Create the game document
-          setDoc(gameRef, {
+          await setDoc(gameRef, {
             players: [playerName],
             creator: playerName,
             gameStarted: false,
@@ -48,17 +44,15 @@ function GameLobby() {
           });
           setIsCreator(true);
         }
-  
+
         setLoading(false);  // Loading is done after this initial process
+      }).catch((error) => {
+        console.error("Error loading game data:", error);
+        setLoading(false); // Stop loading even on error
       });
-  
-      set(playerRef, { connected: true });
-  
-      onDisconnect(playerRef).remove().then(() => {
-        updateDoc(gameRef, {
-          players: arrayRemove(playerName)
-        });
-      });
+    } else {
+      console.error("No playerName provided");
+      setLoading(false); // Stop loading if no player name
     }
   }, [gameCode, playerName, location.state]);
 
@@ -83,10 +77,19 @@ function GameLobby() {
     const unsubscribe = onSnapshot(gameRef, (doc) => {
       if (doc.exists()) {
         const gameData = doc.data();
-        setPlayers(gameData.players || []);
+        const playersList = gameData.players || [];
+        setPlayers(playersList);
         setTasks(gameData.tasks || []);
         setIsCreator(gameData.creator === playerName);
         setImposterHistory(gameData.imposterHistory || {}); // Update imposter history
+
+        // Check if current player was kicked (not in players list anymore)
+        if (playerName && !playersList.includes(playerName)) {
+          console.log(`Player ${playerName} was kicked. Navigating to home...`);
+          alert("You have been removed from the game.");
+          navigate("/");
+          return;
+        }
 
         // If the game has started and we're not already on the countdown screen
         if (gameData.gameStarted && !location.state?.onCountdownScreen) {
@@ -97,6 +100,46 @@ function GameLobby() {
 
     return () => unsubscribe();
   }, [gameCode, playerName, navigate, location.state]);
+
+  // Navigation sync: Check game state on mount and when page becomes visible
+  useEffect(() => {
+    // Don't run sync until initial loading is complete
+    if (loading) return;
+
+    const syncNavigationState = async () => {
+      if (!gameCode || !playerName) return;
+
+      const gameRef = doc(db, "games", gameCode);
+      const docSnapshot = await getDoc(gameRef);
+
+      if (!docSnapshot.exists()) {
+        // Game deleted, go home
+        navigate("/");
+        return;
+      }
+
+      const gameData = docSnapshot.data();
+
+      // Check if game started while we were away
+      if (gameData.gameStarted) {
+        navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: true } });
+      }
+    };
+
+    // Sync when page becomes visible (user returns from backgrounding)
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !loading) {
+        console.log('[GameLobby] Page foregrounded, syncing navigation state');
+        syncNavigationState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [gameCode, playerName, navigate, loading]);
 
   // Add a new task to the list
   const addTask = () => {
@@ -195,6 +238,17 @@ function GameLobby() {
 
   // Assign roles and update gameStarted flag
   const startGame = async () => {
+    // Validate that there are enough tasks
+    if (tasks.length === 0) {
+      alert("Please add at least one task before starting the game.");
+      return;
+    }
+
+    if (tasks.length < tasksPerCrewmate) {
+      alert(`Not enough tasks. You need at least ${tasksPerCrewmate} tasks (current tasks per crewmate setting).`);
+      return;
+    }
+
     if (players.length > 1 && imposterCount <= players.length - 1) {  // Ensure valid imposter count
 
       const gameRef = doc(db, "games", gameCode);
@@ -254,6 +308,23 @@ function GameLobby() {
     }
   };
 
+  const kickPlayer = async (playerToKick) => {
+    if (playerToKick === playerName) {
+      alert("You cannot kick yourself!");
+      return;
+    }
+
+    const gameRef = doc(db, "games", gameCode);
+    try {
+      await updateDoc(gameRef, {
+        players: arrayRemove(playerToKick)
+      });
+      console.log(`Kicked player: ${playerToKick}`);
+    } catch (error) {
+      console.error("Error kicking player: ", error);
+    }
+  };
+
   if (loading) {
     return <div>Loading game data...</div>;
   }
@@ -275,7 +346,16 @@ function GameLobby() {
     key={index}
     className={`player-card ${player === playerName ? 'highlight' : ''}`}
   >
-    {player}
+    <span>{player}</span>
+    {isCreator && player !== playerName && (
+      <button
+        className="kick-button"
+        onClick={() => kickPlayer(player)}
+        title="Remove player"
+      >
+        ✕
+      </button>
+    )}
   </div>
 ))}
       </div>
