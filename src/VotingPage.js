@@ -52,153 +52,112 @@ function VotingPage() {
   }
 
   // Listener for game end
+  // CONSOLIDATED LISTENER - Replaces 6 separate listeners with ONE
+  // Dramatically reduces Firestore reads
   useEffect(() => {
     const gameRef = doc(db, "games", gameCode);
 
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-        const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
-
-        if (gameData.gameEnded) {
-            const result = roles[playerName] === 'Crewmate' && gameData.completedTasks
-              ? 'win'
-              : 'lose';
-
-            // Navigate all players to the Game Over screen
-            navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-          }
-      }
-    });
-
-    return () => unsubscribe();  // Clean up the listener when the component unmounts
-  }, [gameCode, navigate, playerName]);
-
-  // Navigation sync: Check game state on mount and when page becomes visible
-  useEffect(() => {
-    const syncNavigationState = async () => {
-      if (!gameCode || !playerName) return;
-
-      const gameRef = doc(db, "games", gameCode);
-      const docSnapshot = await getDoc(gameRef);
-
       if (!docSnapshot.exists()) {
-        // Game deleted, go home
         navigate("/");
         return;
       }
 
       const gameData = docSnapshot.data();
+      const roles = gameData.roles || {};
 
-      // Check if we should be on a different screen
+      // Update all state from one listener
+      setPlayers(gameData.players || []);
+      setMeetingCaller(gameData.meetingCaller);
+      setDeadPlayers(gameData.killList || []);
+      setRole(gameData.roles?.[playerName] || '');
+      setRoles(gameData.roles || {});
+
+      // Handle game end navigation
       if (gameData.gameEnded) {
-        // Should be on game over page
-        const roles = gameData.roles || {};
         const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
         navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-      } else if (!gameData.gameStarted) {
-        // Should be back in lobby
-        navigate(`/lobby/${gameCode}`, { state: { playerName, gameStarted: false } });
-      } else if (!gameData.meetingCalled && !votingEnded) {
-        // Meeting ended, should be back in countdown
-        navigate(`/countdown/${gameCode}`, { state: { playerName } });
+        return;
       }
-    };
 
-    // Sync on mount
-    syncNavigationState();
+      // Handle game winner display (5 second delay before navigation)
+      if (gameData.winner) {
+        const result = gameData.winner === 'Crewmates' ? 'Crewmates Win!' : 'Imposters Win!';
+        setTimeout(() => {
+          navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+        }, 5000);
+      }
 
-    // Sync when page becomes visible (user returns from backgrounding)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
+      // Handle votes and voting logic
+      const currentVotes = gameData.votes || {};
+      setVotes(currentVotes);
+
+      const alivePlayers = (gameData.players || []).filter(
+        (player) => !(gameData.killList || []).includes(player)
+      );
+      const aliveVotesCast = Object.keys(currentVotes).filter(
+        (voter) => alivePlayers.includes(voter)
+      ).length;
+
+      // If all alive players have voted, end voting
+      if (aliveVotesCast > 0 && aliveVotesCast === alivePlayers.length && !votingEnded) {
+        handleVoteEnd(currentVotes);
+      }
+
+      // Navigate back to countdown when meeting ends
+      if (!gameData.meetingCalled && votingEnded) {
+        setTimeout(() => {
+          updateDoc(gameRef, { meetingCalled: false, votingResult: {}, votes: {} });
+          navigate(`/countdown/${gameCode}`, { state: { playerName } });
+        }, 5000);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [gameCode, playerName, navigate, votingEnded]);
+
+  // Navigation sync when page becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && gameCode && playerName) {
         console.log('[VotingPage] Page foregrounded, syncing navigation state');
-        syncNavigationState();
+        const gameRef = doc(db, "games", gameCode);
+        const docSnapshot = await getDoc(gameRef);
+
+        if (!docSnapshot.exists()) {
+          navigate("/");
+          return;
+        }
+
+        const gameData = docSnapshot.data();
+        const roles = gameData.roles || {};
+
+        if (gameData.gameEnded) {
+          const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
+          navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
+        } else if (!gameData.gameStarted) {
+          navigate(`/lobby/${gameCode}`, { state: { playerName, gameStarted: false } });
+        } else if (!gameData.meetingCalled && !votingEnded) {
+          navigate(`/countdown/${gameCode}`, { state: { playerName } });
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [gameCode, playerName, navigate, votingEnded]);
 
+  // Display voting result character by character
   useEffect(() => {
     if (votingResult) {
-      setDisplayedResult(''); // Reset the displayed result
-  
+      setDisplayedResult('');
       for (let i = 0; i < votingResult.length; i++) {
         setTimeout(() => {
           setDisplayedResult((prev) => prev + votingResult[i]);
-        }, i * 100); // Adjust the timing as needed (100 ms per character)
+        }, i * 100);
       }
     }
   }, [votingResult]);
-
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-  
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-  
-        // If the gameEnded flag is true, navigate all players to the game over screen
-        if (gameData.winner) {
-          const result = gameData.winner === 'Crewmates' 
-            ? 'Crewmates Win!' 
-            : 'Imposters Win!';
-          
-            setTimeout(() => {
-              navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-            }, 5000);
-        }
-      }
-    });
-  
-    return () => unsubscribe();  // Clean up listener on component unmount
-  }, [gameCode, navigate, playerName]);
-
-  // Load players for voting
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-        setPlayers(gameData.players || []);  // Load the list of players for voting
-        setMeetingCaller(gameData.meetingCaller); 
-        setDeadPlayers(gameData.killList || []);
-        setRole(gameData.roles[playerName] || '');
-        setRoles(gameData.roles || {});
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode]);
-
-  // Listen for real-time updates of votes from Firestore
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-        const currentVotes = gameData.votes || {};
-        setVotes(currentVotes); // Update the local votes state
-
-        const alivePlayers = players.filter((player) => !deadPlayers.includes(player));
-
-        // Count the number of players who have voted
-        const aliveVotesCast = Object.keys(currentVotes).filter((voter) => alivePlayers.includes(voter)).length;
-
-        // If all players have voted, end the voting process
-        if (aliveVotesCast > 0 && aliveVotesCast === alivePlayers.length) {
-          handleVoteEnd(currentVotes);  // Call handleVoteEnd to process the votes
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, players.length, voteSubmitted, deadPlayers]);
 
   const handleVoteEnd = async (votes) => {
     const gameRef = doc(db, "games", gameCode);

@@ -56,89 +56,77 @@ function GameLobby() {
     }
   }, [gameCode, playerName, location.state]);
 
+  // CONSOLIDATED LISTENER - Replaces 3 separate listeners with ONE
+  // Dramatically reduces Firestore reads
   useEffect(() => {
+    if (loading) return; // Don't start listener until initial loading is complete
+
     const gameRef = doc(db, "games", gameCode);
-  
+
     const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        console.log("Game document exists, no need to navigate.");
-      } else if (!loading) {  // Only navigate if it's not during initial loading
-        console.log("Game deleted. Navigating to home...");
-        navigate("/");
-      }
-    });
-  
-    return () => unsubscribe();  // Clean up the listener on component unmount
-  }, [gameCode, navigate, loading]);
-
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-
-    const unsubscribe = onSnapshot(gameRef, (doc) => {
-      if (doc.exists()) {
-        const gameData = doc.data();
-        const playersList = gameData.players || [];
-        setPlayers(playersList);
-        setTasks(gameData.tasks || []);
-        setIsCreator(gameData.creator === playerName);
-        setImposterHistory(gameData.imposterHistory || {}); // Update imposter history
-
-        // Check if current player was kicked (not in players list anymore)
-        if (playerName && !playersList.includes(playerName)) {
-          console.log(`Player ${playerName} was kicked. Navigating to home...`);
-          alert("You have been removed from the game.");
-          navigate("/");
-          return;
-        }
-
-        // If the game has started and we're not already on the countdown screen
-        if (gameData.gameStarted && !location.state?.onCountdownScreen) {
-          navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator, gameStarted: true, onCountdownScreen: true } });
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, playerName, navigate, location.state]);
-
-  // Navigation sync: Check game state on mount and when page becomes visible
-  useEffect(() => {
-    // Don't run sync until initial loading is complete
-    if (loading) return;
-
-    const syncNavigationState = async () => {
-      if (!gameCode || !playerName) return;
-
-      const gameRef = doc(db, "games", gameCode);
-      const docSnapshot = await getDoc(gameRef);
-
       if (!docSnapshot.exists()) {
-        // Game deleted, go home
-        navigate("/");
+        if (!loading) {
+          console.log("Game deleted. Navigating to home...");
+          navigate("/");
+        }
         return;
       }
 
       const gameData = docSnapshot.data();
+      const playersList = gameData.players || [];
 
-      // Check if game started while we were away
-      if (gameData.gameStarted) {
-        navigate(`/countdown/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: true } });
+      // Update all state from one listener
+      setPlayers(playersList);
+      setTasks(gameData.tasks || []);
+      setIsCreator(gameData.creator === playerName);
+      setImposterHistory(gameData.imposterHistory || {});
+
+      // Check if current player was kicked
+      if (playerName && !playersList.includes(playerName)) {
+        console.log(`Player ${playerName} was kicked. Navigating to home...`);
+        alert("You have been removed from the game.");
+        navigate("/");
+        return;
       }
-    };
 
-    // Sync when page becomes visible (user returns from backgrounding)
-    const handleVisibilityChange = () => {
-      if (!document.hidden && !loading) {
+      // Navigate to countdown if game started
+      if (gameData.gameStarted && !location.state?.onCountdownScreen) {
+        navigate(`/countdown/${gameCode}`, { 
+          state: { playerName, isCreator: gameData.creator === playerName, gameStarted: true, onCountdownScreen: true } 
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [gameCode, playerName, navigate, location.state, loading]);
+
+  // Navigation sync when page becomes visible
+  useEffect(() => {
+    if (loading) return;
+
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && !loading && gameCode && playerName) {
         console.log('[GameLobby] Page foregrounded, syncing navigation state');
-        syncNavigationState();
+        const gameRef = doc(db, "games", gameCode);
+        const docSnapshot = await getDoc(gameRef);
+
+        if (!docSnapshot.exists()) {
+          navigate("/");
+          return;
+        }
+
+        const gameData = docSnapshot.data();
+
+        if (gameData.gameStarted) {
+          navigate(`/countdown/${gameCode}`, { 
+            state: { playerName, isCreator: gameData.creator === playerName, gameStarted: true } 
+          });
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [gameCode, playerName, navigate, loading]);
 
   // Add a new task to the list

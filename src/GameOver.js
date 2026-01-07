@@ -13,24 +13,38 @@ function GameOver() {
   const [playerResult, setPlayerResult] = useState('');
 
   // Fetch game data and check if the player is the creator
+  // CONSOLIDATED LISTENER - Replaces 3 separate listeners with ONE
+  // Dramatically reduces Firestore reads
   useEffect(() => {
-    const fetchGameData = async () => {
-      const gameRef = doc(db, "games", gameCode);
-      const gameData = (await getDoc(gameRef)).data();
+    const gameRef = doc(db, "games", gameCode);
+
+    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
+      if (!docSnapshot.exists()) {
+        navigate("/");
+        return;
+      }
+
+      const gameData = docSnapshot.data();
+      const roles = gameData.roles || {};
+
+      // Update all state from one listener
+      setIsCreator(gameData.creator === playerName);
 
       // Determine the winning team
-      const crewmates = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Crewmate');
-      const imposters = Object.keys(gameData.roles).filter((player) => gameData.roles[player] === 'Imposter');
+      const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
+      const imposters = Object.keys(roles).filter((player) => roles[player] === 'Imposter');
 
-      // Determine if the crewmates won by completing all tasks
+      // Check if crewmates won by completing all tasks
       const allCrewmatesCompletedTasks = crewmates.every((crewmate) => {
-        const assignedTasks = gameData.assignedTasks[crewmate] || [];
+        const assignedTasks = gameData.assignedTasks?.[crewmate] || [];
         const completedTasks = gameData.completedTasks?.[crewmate] || [];
         return assignedTasks.length === completedTasks.length;
       });
 
       // Check if all imposters have been voted out
-      const allImpostersVotedOut = imposters.every((imposter) => gameData.killList.includes(imposter));
+      const allImpostersVotedOut = imposters.every((imposter) => 
+        (gameData.killList || []).includes(imposter)
+      );
 
       if (allCrewmatesCompletedTasks || allImpostersVotedOut) {
         setWinningTeam('Crewmates Win');
@@ -38,99 +52,54 @@ function GameOver() {
         setWinningTeam('Imposters Win');
       }
 
-      // Set the isCreator flag based on Firestore data
-      setIsCreator(gameData.creator === playerName);
-    };
+      // Set player result
+      if (roles[playerName] === 'Crewmate' && (allCrewmatesCompletedTasks || allImpostersVotedOut)) {
+        setPlayerResult('You Win!');
+      } else if (roles[playerName] === 'Imposter' && !allCrewmatesCompletedTasks && !allImpostersVotedOut) {
+        setPlayerResult('You Win!');
+      } else {
+        setPlayerResult('You Lose!');
+      }
 
-    fetchGameData();
-  }, [gameCode, playerName]);
+      // Handle navigation back to lobby when game round ends
+      if (!gameData.gameStarted) {
+        console.log("Game round ended. Navigating back to lobby...");
+        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: false } });
+      }
+    });
 
-  // Listener for game end
+    return () => unsubscribe();
+  }, [gameCode, playerName, navigate]);
+
+  // Navigation sync when page becomes visible
   useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
+    const handleVisibilityChange = async () => {
+      if (!document.hidden && gameCode && playerName) {
+        console.log('[GameOver] Page foregrounded, syncing navigation state');
+        const gameRef = doc(db, "games", gameCode);
+        const docSnapshot = await getDoc(gameRef);
 
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-
-        // If gameStarted is false, navigate everyone back to the lobby
-        if (!gameData.gameStarted) {
-          console.log("Game round ended. Navigating back to lobby...");
-          navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
+        if (!docSnapshot.exists()) {
+          navigate("/");
+          return;
         }
 
-     }
-    });
-    return () => unsubscribe();  // Clean up the listener when the component unmounts
-  }, [gameCode, navigate, playerName, isCreator]);
+        const gameData = docSnapshot.data();
+        const isCreator = gameData.creator === playerName;
 
-  // Navigation sync: Check game state on mount and when page becomes visible
-  useEffect(() => {
-    const syncNavigationState = async () => {
-      if (!gameCode || !playerName) return;
-
-      const gameRef = doc(db, "games", gameCode);
-      const docSnapshot = await getDoc(gameRef);
-
-      if (!docSnapshot.exists()) {
-        // Game deleted, go home
-        navigate("/");
-        return;
-      }
-
-      const gameData = docSnapshot.data();
-
-      // Check if we should be on a different screen
-      if (!gameData.gameStarted && !gameData.gameEnded) {
-        // Should be back in lobby
-        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
-      } else if (gameData.gameStarted && !gameData.gameEnded) {
-        // Game is still running, should be in countdown
-        navigate(`/countdown/${gameCode}`, { state: { playerName } });
-      } else if (gameData.meetingCalled) {
-        // Meeting called, should be on voting page
-        navigate(`/voting/${gameCode}`, { state: { playerName } });
-      }
-    };
-
-    // Sync on mount
-    syncNavigationState();
-
-    // Sync when page becomes visible (user returns from backgrounding)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log('[GameOver] Page foregrounded, syncing navigation state');
-        syncNavigationState();
+        if (!gameData.gameStarted && !gameData.gameEnded) {
+          navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator, gameStarted: false } });
+        } else if (gameData.gameStarted && !gameData.gameEnded) {
+          navigate(`/countdown/${gameCode}`, { state: { playerName } });
+        } else if (gameData.meetingCalled) {
+          navigate(`/voting/${gameCode}`, { state: { playerName } });
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [gameCode, playerName, navigate, isCreator]);
-
-  // Set the player result based on the winning team
-  useEffect(() => {
-    if (winningTeam) {
-      const fetchGameResult = async () => {
-        const gameRef = doc(db, "games", gameCode);
-        const gameData = (await getDoc(gameRef)).data();
-
-        // Determine if the player won or lost
-        if (gameData.roles[playerName] === 'Crewmate' && winningTeam === 'Crewmates Win') {
-          setPlayerResult('You Win!');
-        } else if (gameData.roles[playerName] === 'Imposter' && winningTeam === 'Imposters Win') {
-          setPlayerResult('You Win!');
-        } else {
-          setPlayerResult('You Lose!');
-        }
-      };
-
-      fetchGameResult();
-    }
-  }, [winningTeam, gameCode, playerName]);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [gameCode, playerName, navigate]);
 
   const endGameAndReturnToLobby = async () => {
     const gameRef = doc(db, "games", gameCode);
