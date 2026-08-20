@@ -1,13 +1,48 @@
 rules_version = '2';
 
+// Phase 1: require an identity, forbid enumeration, bound the document.
+// Writes are still not attributed to a player -- roles, votes and kills are
+// keyed by display name, so any signed-in player can still write any field.
+// Closing that requires re-keying on uid (phase 3).
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /games/{gameCode} {
-      allow read: if true;
-      allow create: if request.resource.data.players.size() <= 25;
-      allow update: if request.resource.data.players.size() <= 25;
-      allow delete: if true;
+
+    function signedIn() {
+      return request.auth != null;
     }
+
+    function boundedGame(data) {
+      return data.players is list
+        && data.players.size() <= 25
+        && data.creator is string
+        && (!('tasks' in data.keys()) || (data.tasks is list && data.tasks.size() <= 60))
+        && (!('killList' in data.keys()) || (data.killList is list && data.killList.size() <= 25));
+    }
+
+    match /games/{gameCode} {
+      // A player needs to fetch a game by code to join it, but nobody may
+      // list the collection and harvest every live game's roles.
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if signedIn()
+        && gameCode.size() == 6
+        && boundedGame(request.resource.data)
+        && request.resource.data.players.size() == 1
+        && request.resource.data.creator == request.resource.data.players[0];
+
+      // The host cannot be swapped out from under the room. The resource
+      // guard keeps this returning false rather than erroring when there is
+      // no existing document to compare against.
+      allow update: if signedIn()
+        && resource != null
+        && boundedGame(request.resource.data)
+        && request.resource.data.creator == resource.data.creator;
+
+      allow delete: if signedIn();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
