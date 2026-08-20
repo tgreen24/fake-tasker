@@ -1,532 +1,301 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { db } from './firebase';  // Firestore config
-import { doc, getDoc, updateDoc, onSnapshot, deleteField } from "firebase/firestore";  // Firestore functions
+import React, { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { arrayRemove, arrayUnion, deleteField } from 'firebase/firestore';
+import { updateGame } from './db';
+import { VOTE_DURATION_MS } from './voteLogic';
+import { usePlayerName } from './hooks/usePlayerName';
+import { useGameSync } from './hooks/useGameSync';
+import ConnectionBanner from './components/ConnectionBanner';
+
+const SABOTAGE_COOLDOWN_SECONDS = 120;
 
 function Countdown() {
   const { gameCode } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const playerName = location.state?.playerName || '';
-  const [isCreator, setIsCreator] = useState(false);
+  const playerName = usePlayerName(gameCode);
+  const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+
   const [countdown, setCountdown] = useState(3);
-  const [role, setRole] = useState('');
-  const [tasks, setTasks] = useState([]);  // Crewmate's tasks
-  const [completedTasks, setCompletedTasks] = useState([]);  // Completed tasks
-  const [killList, setKillList] = useState([]);  // Imposter's kill list
-  const [crewmates, setCrewmates] = useState([]);
-  const [isDead, setIsDead] = useState(false);
-  const [totalTasks, setTotalTasks] = useState(100);
-  const [totalCompletedTasks, setTotalCompletedTasks] = useState(0);
-  const [killCooldown, setKillCooldown] = useState(0);
   const [cooldownTimer, setCooldownTimer] = useState(0);
-  const [fellowImposters, setFellowImposters] = useState([]); // Fellow imposters
-  const [isSabotageDialogOpen, setIsSabotageDialogOpen] = useState(false);
   const [sabotageCooldown, setSabotageCooldown] = useState(0);
-  const [tasksBlocked, setTasksBlocked] = useState(false);
-  const [sabotagingImposter, setSabotagingImposter] = useState('')
-  const [sabotageActive, setSabotageActive] = useState(false);
-  const [sabotagedPlayer, setSabotagedPlayer] = useState('');
-  const [eligibleCrewmates, setEligibleCrewmates] = useState([]);
+  const [isSabotageDialogOpen, setIsSabotageDialogOpen] = useState(false);
+
+  const roles = useMemo(() => gameData?.roles || {}, [gameData]);
+  const killList = useMemo(() => gameData?.killList || [], [gameData]);
+  const sabotages = useMemo(() => gameData?.sabotages || {}, [gameData]);
+
+  const role = roles[playerName];
+  const isCreator = gameData?.creator === playerName;
+  const isDead = killList.includes(playerName);
+  const killCooldown = gameData?.killCooldown || 30;
+
+  const tasks = useMemo(() => gameData?.assignedTasks?.[playerName] || [], [gameData, playerName]);
+  const completedTasks = useMemo(() => gameData?.completedTasks?.[playerName] || [], [gameData, playerName]);
+
+  const crewmates = useMemo(
+    () => Object.keys(roles).filter((player) => roles[player] === 'Crewmate').sort(),
+    [roles]
+  );
+  const fellowImposters = useMemo(
+    () => Object.keys(roles).filter((player) => roles[player] === 'Imposter' && player !== playerName).sort(),
+    [roles, playerName]
+  );
+
+  const mySabotage = sabotages[playerName];
+  const sabotagingImposter = Object.keys(sabotages).find(
+    (imposter) => sabotages[imposter]?.sabotagedPlayer === playerName
+  );
+  const tasksBlocked = !!sabotagingImposter;
+  const sabotageActive = !!mySabotage;
+  const sabotagedPlayer = mySabotage?.sabotagedPlayer || '';
+
+  const eligibleCrewmates = crewmates.filter((crewmate) => {
+    const assigned = gameData?.assignedTasks?.[crewmate] || [];
+    const done = gameData?.completedTasks?.[crewmate] || [];
+    const alreadySabotaged = Object.values(sabotages).some((s) => s.sabotagedPlayer === crewmate);
+    return assigned.length > done.length && !alreadySabotaged && !killList.includes(crewmate);
+  });
+
+  const totalTasks = crewmates.reduce(
+    (total, crewmate) => total + (gameData?.assignedTasks?.[crewmate]?.length || 0), 0
+  );
+  const totalCompletedTasks = crewmates.reduce(
+    (total, crewmate) => total + (gameData?.completedTasks?.[crewmate]?.length || 0), 0
+  );
+  const progress = totalTasks > 0 ? Math.round((totalCompletedTasks / totalTasks) * 100) : 0;
 
   useEffect(() => {
-    if (countdown === 0) {
-      const gameRef = doc(db, "games", gameCode);
-      getDoc(gameRef).then((docSnapshot) => {
-        if (docSnapshot.exists()) {
-          const gameData = docSnapshot.data();
-          const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
-          const playerRole = roles[playerName];
-          setRole(playerRole);
-          setIsCreator(gameData.creator === playerName);
-          setIsDead(gameData.killList?.includes(playerName));
-          setKillCooldown(gameData.killCooldown || 30); // Load kill cooldown
-  
-          // If player is a crewmate, load their assigned tasks
-          if (playerRole === 'Crewmate') {
-            setTasks(gameData.assignedTasks[playerName] || []);
-            setCompletedTasks(gameData.completedTasks?.[playerName] || []);
-          }
-
-          // Snippet 2: Imposter logic
-          if (playerRole === 'Imposter') {
-            setKillList(gameData.killList || []);  // Set kill list for imposters
-            const crewmatesList = Object.keys(roles).filter(player => roles[player] === 'Crewmate').sort();
-            setCrewmates(crewmatesList);  // Set the list of crewmates for imposters
-
-            const impostersList = Object.keys(roles)
-              .filter(player => roles[player] === 'Imposter' && player !== playerName)
-              .sort();
-            setFellowImposters(impostersList);
-          }
-        }
-      });
-    }
-  }, [countdown, gameCode, playerName]);
-
-  // Fetch eligible crewmates when the dialog opens
-  useEffect(() => {
-    if (isSabotageDialogOpen) {
-      const fetchEligibleCrewmates = async () => {
-        const gameRef = doc(db, "games", gameCode);
-        const gameData = (await getDoc(gameRef)).data();
-
-        const eligible = crewmates.filter(crewmate => {
-          const assignedTasks = gameData.assignedTasks?.[crewmate] || [];
-          const completedTasks = gameData.completedTasks?.[crewmate] || [];
-          const isBeingSabotaged = Object.values(gameData.sabotages || {}).some(
-            sabotage => sabotage.sabotagedPlayer === crewmate
-          );
-          return assignedTasks.length > completedTasks.length && !isBeingSabotaged;
-        });
-
-        setEligibleCrewmates(eligible);
-      };
-
-      fetchEligibleCrewmates();
-    }
-  }, [isSabotageDialogOpen, crewmates, gameCode]);
-
-  // CONSOLIDATED LISTENER - Replaces 8 separate listeners with ONE
-  // This dramatically reduces Firestore reads (from ~32 reads per update to ~4 reads)
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (!docSnapshot.exists()) {
-        console.log("Game deleted. Navigating to home...");
-        navigate("/");
-        return;
-      }
-
-      const gameData = docSnapshot.data();
-      const roles = gameData.roles || {};
-
-      // Update all state from one listener
-      setIsCreator(gameData.creator === playerName);
-      setRole(roles[playerName]);
-      setKillList(gameData.killList || []);
-      setIsDead(gameData.killList?.includes(playerName));
-
-      // Update crewmates list
-      const crewmatesList = Object.keys(roles)
-        .filter(player => roles[player] === 'Crewmate')
-        .sort();
-      setCrewmates(crewmatesList);
-
-      // Handle sabotages
-      const allSabotages = gameData.sabotages || {};
-      const currentPlayerSabotageEntry = Object.entries(allSabotages).find(
-        ([imposterName, sabotage]) =>
-          (sabotage.sabotagedPlayer === playerName) ||
-          (imposterName === playerName)
-      );
-
-      if (currentPlayerSabotageEntry) {
-        const [imposterName, currentPlayerSabotage] = currentPlayerSabotageEntry;
-        setTasksBlocked(currentPlayerSabotage.sabotagedPlayer === playerName);
-        setSabotagingImposter(imposterName);
-        setSabotageActive(true);
-        setSabotagedPlayer(currentPlayerSabotage.sabotagedPlayer);
-      } else {
-        setTasksBlocked(false);
-        setSabotagingImposter('');
-        setSabotageActive(false);
-        setSabotagedPlayer('');
-      }
-
-      // Calculate task progress for all crewmates
-      const combinedTasks = crewmatesList.reduce((total, crewmate) =>
-        total + (gameData.assignedTasks?.[crewmate]?.length || 0), 0);
-      const completedTasksCount = crewmatesList.reduce((total, crewmate) =>
-        total + (gameData.completedTasks?.[crewmate]?.length || 0), 0);
-
-      setTotalTasks(combinedTasks);
-      setTotalCompletedTasks(completedTasksCount);
-
-      // Handle navigation based on game state
-      if (!gameData.gameStarted && !gameData.gameEnded) {
-        console.log("Game round ended. Navigating back to lobby...");
-        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: false } });
-      } else if (gameData.meetingCalled) {
-        resetSabotage();
-        navigate(`/voting/${gameCode}`, { state: { playerName } });
-      } else if (gameData.gameEnded) {
-        const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
-        navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, playerName, navigate, isCreator]);
-
-  // Navigation sync when page becomes visible (user returns from background)
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (!document.hidden && gameCode && playerName) {
-        console.log('[Countdown] Page foregrounded, syncing navigation state');
-        const gameRef = doc(db, "games", gameCode);
-        const docSnapshot = await getDoc(gameRef);
-
-        if (!docSnapshot.exists()) {
-          navigate("/");
-          return;
-        }
-
-        const gameData = docSnapshot.data();
-        const roles = gameData.roles || {};
-
-        if (gameData.meetingCalled) {
-          resetSabotage();
-          navigate(`/voting/${gameCode}`, { state: { playerName } });
-        } else if (gameData.gameEnded) {
-          const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
-          navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-        } else if (!gameData.gameStarted) {
-          navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: gameData.creator === playerName, gameStarted: false } });
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [gameCode, playerName, navigate, isCreator]);
-
-  // Countdown logic
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => prev - 1);
-    }, 1000);
-
-    if (countdown === 0) {
-      clearInterval(timer);
-    }
-
-    return () => clearInterval(timer);
+    if (countdown <= 0) return undefined;
+    const timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
   }, [countdown]);
+
+  useEffect(() => {
+    if (cooldownTimer <= 0) return undefined;
+    const timer = setTimeout(() => setCooldownTimer((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownTimer]);
+
+  useEffect(() => {
+    if (sabotageCooldown <= 0) return undefined;
+    const timer = setTimeout(() => setSabotageCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [sabotageCooldown]);
+
+  const endRoundIfImpostersWin = async (nextKillList) => {
+    const aliveCrewmates = Object.keys(roles).filter(
+      (player) => roles[player] === 'Crewmate' && !nextKillList.includes(player)
+    ).length;
+    const aliveImposters = Object.keys(roles).filter(
+      (player) => roles[player] === 'Imposter' && !nextKillList.includes(player)
+    ).length;
+
+    if (aliveImposters > 0 && aliveImposters >= aliveCrewmates) {
+      await updateGame(gameCode, { gameEnded: true, winner: 'Imposters' });
+    }
+  };
 
   const toggleCrewmateDeath = async (crewmate) => {
     if (killList.includes(crewmate)) {
-      // If the crewmate is already in the kill list, remove them
-      const updatedKillList = killList.filter((name) => name !== crewmate);
-      setKillList(updatedKillList);
-  
-      // Reset cooldown timer if the current kill was untoggled
-      if (cooldownTimer > 0) {
-        setCooldownTimer(0);
-      }
-  
-      // Update Firestore with the updated kill list
-      const gameRef = doc(db, "games", gameCode);
-      await updateDoc(gameRef, {
-        killList: updatedKillList
-      });
-  
+      setCooldownTimer(0);
+      await updateGame(gameCode, { killList: arrayRemove(crewmate) });
       return;
     }
-  
-    if (cooldownTimer > 0) {
-      console.log("Kill cooldown active, cannot kill yet.");
-      return;
-    }
-  
-    // Add crewmate to kill list
-    const updatedKillList = [...killList, crewmate];
-    setKillList(updatedKillList);
-  
-    // Update Firestore with new kill list
-    const gameRef = doc(db, "games", gameCode);
-    await updateDoc(gameRef, {
-      killList: updatedKillList
-    });
-  
-    await checkIfAllKillsCompleted(updatedKillList);
-  
-    // Start cooldown timer
+
+    if (cooldownTimer > 0) return;
+
     setCooldownTimer(killCooldown);
-  };
-
-  useEffect(() => {
-    if (sabotageCooldown > 0) {
-      const timer = setInterval(() => {
-        setSabotageCooldown((prev) => prev - 1);
-      }, 1000);
-  
-      return () => clearInterval(timer);
-    }
-  }, [sabotageCooldown]);
-
-  useEffect(() => {
-    if (cooldownTimer > 0) {
-      const timer = setInterval(() => {
-        setCooldownTimer((prev) => prev - 1);
-      }, 1000);
-
-      return () => clearInterval(timer);
-    }
-  }, [cooldownTimer]);
-
-
-  const checkIfAllKillsCompleted = async (updatedKillList) => {
-    const gameRef = doc(db, "games", gameCode);
-    const gameData = (await getDoc(gameRef)).data();
-    const roles = gameData.roles || {};
-
-    const aliveCrewmates = Object.keys(roles).filter(
-      (player) => roles[player] === 'Crewmate' && !updatedKillList.includes(player)
-    );
-    const aliveImposters = Object.keys(roles).filter(
-      (player) => roles[player] === 'Imposter' && !updatedKillList.includes(player)
-    );
-
-    if (aliveImposters.length >= aliveCrewmates.length) {
-      // Navigate to the Game Over screen and pass lose state
-      navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
-      await updateDoc(gameRef, { gameEnded: true });
-    }
-  };
-
-  const toggleTaskCompletion = (task) => {
-    if (tasksBlocked) {
-      console.log("Tasks are blocked due to sabotage. Find the imposter to resume.");
+    const ok = await updateGame(gameCode, { killList: arrayUnion(crewmate) });
+    if (!ok) {
+      setCooldownTimer(0);
       return;
     }
+    await endRoundIfImpostersWin([...killList, crewmate]);
+  };
 
-    const updatedCompletedTasks = completedTasks.includes(task)
+  const toggleTaskCompletion = async (task) => {
+    if (tasksBlocked) return;
+
+    const nextCompleted = completedTasks.includes(task)
       ? completedTasks.filter((t) => t !== task)
       : [...completedTasks, task];
-  
-    setCompletedTasks(updatedCompletedTasks);
-  
-    // Update completed tasks for the current player in Firestore
-    const gameRef = doc(db, "games", gameCode);
-    updateDoc(gameRef, {
-      [`completedTasks.${playerName}`]: updatedCompletedTasks  // Store each crewmate's completed tasks
-    });
-  
-    // Check if all crewmates have completed their tasks
-    checkIfAllTasksCompleted();
-  };
 
-  const checkIfAllTasksCompleted = async () => {
-    const gameRef = doc(db, "games", gameCode);
-    const gameData = (await getDoc(gameRef)).data();
-    const roles = gameData.roles || {}; // Default to an empty object if roles is undefined
-    
-    // Get all crewmates
-    const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
-    
-    // Check if all crewmates have completed all their assigned tasks
-    const allTasksCompleted = crewmates.every((crewmate) => {
-      const assignedTasks = gameData.assignedTasks[crewmate] || [];
-      const completedTasks = gameData.completedTasks?.[crewmate] || [];
-      
-      // Ensure all assigned tasks are completed by this crewmate
-      return assignedTasks.length === completedTasks.length;
+    const ok = await updateGame(gameCode, { [`completedTasks.${playerName}`]: nextCompleted });
+    if (!ok) return;
+
+    const allTasksDone = crewmates.length > 0 && crewmates.every((crewmate) => {
+      const assigned = gameData?.assignedTasks?.[crewmate] || [];
+      const done = crewmate === playerName ? nextCompleted : (gameData?.completedTasks?.[crewmate] || []);
+      return done.length >= assigned.length;
     });
-  
-    // If all crewmates have completed their tasks, end the game
-    if (allTasksCompleted) {
-      // Mark game as ended in Firestore and navigate to the game over screen
-      await updateDoc(gameRef, { gameEnded: true });
-  
-      // Navigate to the Game Over screen for all players
-      navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'win' } });
+
+    if (allTasksDone) {
+      await updateGame(gameCode, { gameEnded: true, winner: 'Crewmates' });
     }
   };
-  
-  const callEmergencyMeeting = async () => {
-    const gameRef = doc(db, "games", gameCode);
-    await updateDoc(gameRef, { meetingCalled: true, meetingCaller: playerName });
-  };
+
+  const callEmergencyMeeting = () => updateGame(gameCode, {
+    meetingCalled: true,
+    meetingCaller: playerName,
+    voteDeadline: Date.now() + VOTE_DURATION_MS,
+    votes: {},
+    sabotages: {},
+    votingResult: deleteField(),
+    resultUntil: deleteField()
+  });
 
   const initiateFindMeSabotage = async (crewmate) => {
-    if (sabotageCooldown > 0) {
-      alert("Sabotage cooldown active, cannot sabotage yet.");
-      return;
-    }
-  
-    const gameRef = doc(db, "games", gameCode);
-    try {
-      await updateDoc(gameRef, {
-        [`sabotages.${playerName}`]: {
-          sabotagedPlayer: crewmate,
-        }
-      });
-      console.log(`Crewmate ${crewmate} has been sabotaged by ${playerName}.`);
-    } catch (error) {
-      console.error("Error initiating sabotage:", error);
-    }
-  
+    if (sabotageCooldown > 0) return;
     setIsSabotageDialogOpen(false);
+    await updateGame(gameCode, { [`sabotages.${playerName}`]: { sabotagedPlayer: crewmate } });
   };
-  
-  const resetSabotage = async () => {
-    const gameRef = doc(db, "games", gameCode);
-    try {
-      await updateDoc(gameRef, {
-        [`sabotages.${playerName}`]: deleteField() // Remove the sabotage entry entirely
-      });
-      console.log("Sabotage reset for imposter.");
-    } catch (error) {
-      console.error("Error resetting sabotage:", error);
-    }
-  };
-  
+
   const handleSabotageReset = async () => {
-    resetSabotage();
-    setSabotageCooldown(120);
+    setSabotageCooldown(SABOTAGE_COOLDOWN_SECONDS);
+    await updateGame(gameCode, { [`sabotages.${playerName}`]: deleteField() });
+  };
+
+  const endGameRound = () => updateGame(gameCode, {
+    gameStarted: false,
+    gameEnded: false,
+    meetingCalled: false,
+    sabotages: {},
+    votes: {},
+    voteDeadline: deleteField(),
+    votingResult: deleteField(),
+    resultUntil: deleteField()
+  });
+
+  if (loading) {
+    return <div className="countdown-screen"><ConnectionBanner connected={connected} />Loading…</div>;
   }
 
-  // End the game round
-  const endGameRound = async () => {
-    const gameRef = doc(db, "games", gameCode);
+  return (
+    <div className="countdown-screen">
+      <ConnectionBanner connected={connected} />
+      <div className="background-overlay">
+        {countdown > 0 ? (
+          <div className="countdown">
+            <h1 className="countdown-timer">Game starting in... {countdown}</h1>
+          </div>
+        ) : (
+          <div className="game-content">
+            <div className="player-info">
+              <h2 className="player-name">{playerName}</h2>
+            </div>
 
-    try {
-      await updateDoc(gameRef, { gameStarted: false });
-      console.log("Game round ended.");
-    } catch (error) {
-      console.error("Error ending game round:", error);
-    }
-  };
-
-  return <div className="countdown-screen">
-  <div className="background-overlay">
-    {countdown > 0 ? (
-      <div className="countdown">
-        <h1 className="countdown-timer">Game starting in... {countdown}</h1>
-      </div>
-    ) : (
-      <div className="game-content">
-        <div className="player-info">
-          <h2 className="player-name">{playerName}</h2>
-        </div>
-
-        <h2 className={`role-announcement ${role}`}>
-              {isDead
-                ? `You are a Dead ${role}`
-                : role === 'Imposter'
-                ? 'You are the Imposter!'
-                : 'You are a Crewmate!'}
+            <h2 className={`role-announcement ${role || ''}`}>
+              {isDead ? `You are a Dead ${role}` : role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}
             </h2>
 
-        {role === 'Crewmate' && !tasksBlocked && (
-          <div>
-            <h3>Your Tasks</h3>
-            <div className="task-list">
-            <ul>
-              {tasks.map((task, index) => (
-                <li 
-                key={index} 
-                className={`task-item ${completedTasks.includes(task) ? 'selected' : ''}`}
-                onClick={() => toggleTaskCompletion(task)}
-              >
-                {task}
-              </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        )}
+            {role === 'Crewmate' && !tasksBlocked && (
+              <div>
+                <h3>Your Tasks</h3>
+                <div className="task-list">
+                  <ul>
+                    {tasks.map((task) => (
+                      <li
+                        key={task}
+                        className={`task-item ${completedTasks.includes(task) ? 'selected' : ''}`}
+                        onClick={() => toggleTaskCompletion(task)}
+                      >
+                        {task}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
 
-      {role === 'Crewmate' && tasksBlocked && (
-          <div>
-            <h3>You have been sabotaged</h3>
-            <p>Find {sabotagingImposter} to resume your tasks!</p>
-        </div>
-        )}
+            {role === 'Crewmate' && tasksBlocked && (
+              <div>
+                <h3>You have been sabotaged</h3>
+                <p>Find {sabotagingImposter} to resume your tasks!</p>
+              </div>
+            )}
 
-        {role === 'Imposter' && !isDead && (
-          <div>
-            <h3>Kill List</h3>
-            <div className="kill-list">
-              <ul>
-                {crewmates.map((crewmate, index) => (
-                  <li 
-                  key={index} 
-                  className={`kill-item ${killList.includes(crewmate) ? 'selected' : ''}`} 
-                  onClick={() => toggleCrewmateDeath(crewmate)}>
-                  <label>{crewmate}</label>
-                </li>
-                ))}
-              </ul>
-            </div>
-            {cooldownTimer > 0 && (
-                  <div className="cooldown-timer">
-                    Cooldown: {cooldownTimer}s
+            {role === 'Imposter' && !isDead && (
+              <div>
+                <h3>Kill List</h3>
+                <div className="kill-list">
+                  <ul>
+                    {crewmates.map((crewmate) => (
+                      <li
+                        key={crewmate}
+                        className={`kill-item ${killList.includes(crewmate) ? 'selected' : ''}`}
+                        onClick={() => toggleCrewmateDeath(crewmate)}
+                      >
+                        <label>{crewmate}</label>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {cooldownTimer > 0 && <div className="cooldown-timer">Cooldown: {cooldownTimer}s</div>}
+                {fellowImposters.length > 0 && (
+                  <div className="fellow-imposters">
+                    <p>Other Imposters: {fellowImposters.join(', ')}</p>
                   </div>
                 )}
-                {fellowImposters.length > 0 && (
-                    <div className="fellow-imposters">
-                      <p>Other Imposters: {fellowImposters.join(', ')}</p>
+              </div>
+            )}
+
+            {role === 'Imposter' && isDead && !sabotageActive && (
+              <div>
+                <button
+                  className="end-game-btn"
+                  onClick={() => setIsSabotageDialogOpen(true)}
+                  disabled={sabotageCooldown > 0 || eligibleCrewmates.length === 0}
+                >
+                  Sabotage
+                </button>
+                {isSabotageDialogOpen && (
+                  <div className="dialog-overlay">
+                    <div className="dialog">
+                      <h3>Select a player to sabotage:</h3>
+                      <ul>
+                        {eligibleCrewmates.map((crewmate) => (
+                          <li className="kill-item" key={crewmate} onClick={() => initiateFindMeSabotage(crewmate)}>
+                            <label className="sabotage-option-btn">{crewmate}</label>
+                          </li>
+                        ))}
+                      </ul>
+                      <button className="end-game-btn" onClick={() => setIsSabotageDialogOpen(false)}>Cancel</button>
                     </div>
-                  )}
-            </div>
-        )}
-
-        {role === 'Imposter' && isDead && !sabotageActive && (
-          <div>
-            <button className="end-game-btn" onClick={() => setIsSabotageDialogOpen(true)}>
-              Sabotage
-            </button>
-            {isSabotageDialogOpen && (
-                <div className="dialog-overlay">
-                  <div className="dialog">
-                    <h3>Select a player to sabotage:</h3>
-                    <ul>
-                      {eligibleCrewmates.map((crewmate, index) => (
-                        <li className='kill-item' key={index} onClick={() => initiateFindMeSabotage(crewmate)}>
-                          <label className="sabotage-option-btn">{crewmate}</label>
-                        </li>
-                      ))}
-                    </ul>
-                    <button className='end-game-btn' onClick={() => setIsSabotageDialogOpen(false)}>Cancel</button>
                   </div>
-                </div>
-              )}
-              {sabotageCooldown > 0 && (
-                <div className="sabotage-cooldown">
-                  Sabotage Cooldown: {sabotageCooldown}s
-                </div>
-              )}
-          </div>
-        )}
+                )}
+                {sabotageCooldown > 0 && (
+                  <div className="sabotage-cooldown">Sabotage Cooldown: {sabotageCooldown}s</div>
+                )}
+              </div>
+            )}
 
-        {role === 'Imposter' && isDead && sabotageActive && (
-          <div>
-            <p>Hide in one place and wait for {sabotagedPlayer} to find you. Once they do, press the button below.</p>
-            <button className="reset-sabotage-btn" onClick={handleSabotageReset}>
-              {sabotagedPlayer} Found Me
-            </button>
-          </div>
-        )}
+            {role === 'Imposter' && isDead && sabotageActive && (
+              <div>
+                <p>Hide in one place and wait for {sabotagedPlayer} to find you. Once they do, press the button below.</p>
+                <button className="reset-sabotage-btn" onClick={handleSabotageReset}>
+                  {sabotagedPlayer} Found Me
+                </button>
+              </div>
+            )}
 
             <div className="progress-bar-container">
-              <div 
-                className="progress-bar" 
-                style={{ width: `${(totalCompletedTasks / totalTasks) * 100}%` }}
-              >
-                {Math.round((totalCompletedTasks / totalTasks) * 100)}%
-              </div>
+              <div className="progress-bar" style={{ width: `${progress}%` }}>{progress}%</div>
             </div>
 
-        <div className="buttons">
-          {role && !isDead && !tasksBlocked && (
-            <button className="emergency-meeting-btn" onClick={callEmergencyMeeting} disabled={isDead}>
-              🚨 Emergency Meeting
-            </button>
-          )}
-
-          {isCreator && (
-            <button className="end-game-btn" onClick={endGameRound}>
-              End Game Round
-            </button>
-          )}
-        </div>
+            <div className="buttons">
+              {role && !isDead && !tasksBlocked && (
+                <button className="emergency-meeting-btn" onClick={callEmergencyMeeting}>
+                  🚨 Emergency Meeting
+                </button>
+              )}
+              {isCreator && (
+                <button className="end-game-btn" onClick={endGameRound}>End Game Round</button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-    )}
-  </div>
-</div>
+    </div>
+  );
 }
 
 export default Countdown;

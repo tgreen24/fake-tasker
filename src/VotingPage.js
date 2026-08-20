@@ -1,10 +1,25 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { doc, getDoc, updateDoc, arrayUnion, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';  // Firestore config
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { doc, runTransaction, deleteField } from 'firebase/firestore';
+import { db } from './firebase';
+import { updateGame } from './db';
+import { usePlayerName } from './hooks/usePlayerName';
+import { useGameSync } from './hooks/useGameSync';
+import { RESULT_DISPLAY_MS, showingVoteResult } from './gameRoute';
+import {
+  alivePlayersOf,
+  decideOutcome,
+  resolveVote,
+  shouldResolveMeeting,
+  votesCastBy
+} from './voteLogic';
+import ConnectionBanner from './components/ConnectionBanner';
+
+const HOST_HEAD_START_MS = 2500;
+const PEER_STAGGER_MS = 750;
 
 function DeadPlayersList({ deadPlayers }) {
-  if (deadPlayers.length === 0) return
+  if (deadPlayers.length === 0) return null;
   return (
     <div className="dead-players-list">
       <h3>Dead Players</h3>
@@ -13,316 +28,168 @@ function DeadPlayersList({ deadPlayers }) {
   );
 }
 
+// Any awake client may close the meeting; the transaction makes it happen exactly once.
+async function closeMeeting(gameCode, { force = false } = {}) {
+  const gameRef = doc(db, 'games', gameCode);
+  try {
+    await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef);
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.data();
+      if (!data.meetingCalled) return;
+      if (!force && !shouldResolveMeeting(data)) return;
+
+      const { message, votedOut } = resolveVote(data);
+      const killList = data.killList || [];
+      const nextKillList = votedOut ? [...killList, votedOut] : killList;
+      const winner = decideOutcome(data.roles || {}, nextKillList);
+
+      tx.update(gameRef, {
+        meetingCalled: false,
+        votingResult: message,
+        resultUntil: Date.now() + RESULT_DISPLAY_MS,
+        voteDeadline: deleteField(),
+        ...(votedOut ? { killList: nextKillList } : {}),
+        ...(winner ? { gameEnded: true, winner } : {})
+      });
+    });
+  } catch (error) {
+    console.warn('[voting] could not close the meeting', error);
+  }
+}
+
 function VotingPage() {
   const { gameCode } = useParams();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const playerName = location.state?.playerName || '';
-  const [players, setPlayers] = useState([]);
-  const [votes, setVotes] = useState({});
+  const playerName = usePlayerName(gameCode);
+  const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+
   const [selectedVote, setSelectedVote] = useState('');
-  const [voteConfirmation, setVoteConfirmation] = useState('');
-  const [voteSubmitted, setVoteSubmitted] = useState(false); 
-  const [votingResult, setVotingResult] = useState('');  // State to store the voting result
-  const [votingEnded, setVotingEnded] = useState(false);
-  const [meetingCaller, setMeetingCaller] = useState('');
-  const [displayedResult, setDisplayedResult] = useState(''); 
-  const [deadPlayers, setDeadPlayers] = useState([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedKillPlayer, setSelectedKillPlayer] = useState('');
-  const [role, setRole] = useState('');
-  const [roles, setRoles] = useState({});
+  const [displayedResult, setDisplayedResult] = useState('');
+  const [secondsLeft, setSecondsLeft] = useState(null);
 
-  let writeCount = 0;
-  const MAX_WRITES = 300;
+  const players = useMemo(() => gameData?.players || [], [gameData]);
+  const roles = useMemo(() => gameData?.roles || {}, [gameData]);
+  const deadPlayers = useMemo(() => gameData?.killList || [], [gameData]);
+  const votes = useMemo(() => gameData?.votes || {}, [gameData]);
 
-  function safeWrite(data) {
-    if (writeCount >= MAX_WRITES) {
-      console.warn("Max write limit reached, halting further writes.");
-      return;
-    }
-  
-    const gameRef = doc(db, "games", gameCode);
-    updateDoc(gameRef, data)
-      .then(() => {
-        writeCount++;
-        console.log(`Firestore updated: ${writeCount}`);
-      })
-      .catch((error) => console.error("Error updating Firestore:", error));
-  }
+  const role = roles[playerName];
+  const isCreator = gameData?.creator === playerName;
+  const isAlive = !deadPlayers.includes(playerName);
+  const meetingCaller = gameData?.meetingCaller || '';
+  const votingResult = gameData?.votingResult || '';
+  const votingEnded = showingVoteResult(gameData) || (!gameData?.meetingCalled && !!votingResult);
+  const myVote = votes[playerName];
 
-  // Listener for game end
-  // CONSOLIDATED LISTENER - Replaces 6 separate listeners with ONE
-  // Dramatically reduces Firestore reads
+  const alivePlayers = useMemo(() => alivePlayersOf(gameData), [gameData]);
+  const votesCast = votesCastBy(gameData, alivePlayers);
+  const meetingCalled = !!gameData?.meetingCalled;
+  const voteDeadline = gameData?.voteDeadline;
+
+  // Everyone is a candidate resolver. The host tries first; peers back it up
+  // on a stagger so a sleeping host cannot hang the meeting.
+  const myTurnDelay = isCreator ? 0 : HOST_HEAD_START_MS + Math.max(0, players.indexOf(playerName)) * PEER_STAGGER_MS;
+
   useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
+    if (!meetingCalled) return undefined;
 
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (!docSnapshot.exists()) {
-        navigate("/");
-        return;
-      }
-
-      const gameData = docSnapshot.data();
-      const roles = gameData.roles || {};
-
-      // Update all state from one listener
-      setPlayers(gameData.players || []);
-      setMeetingCaller(gameData.meetingCaller);
-      setDeadPlayers(gameData.killList || []);
-      setRole(gameData.roles?.[playerName] || '');
-      setRoles(gameData.roles || {});
-
-      // Handle game end navigation
-      if (gameData.gameEnded) {
-        const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
-        navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-        return;
-      }
-
-      // Handle game winner display (5 second delay before navigation)
-      if (gameData.winner) {
-        const result = gameData.winner === 'Crewmates' ? 'Crewmates Win!' : 'Imposters Win!';
-        setTimeout(() => {
-          navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-        }, 5000);
-      }
-
-      // Handle votes and voting logic
-      const currentVotes = gameData.votes || {};
-      setVotes(currentVotes);
-
-      const alivePlayers = (gameData.players || []).filter(
-        (player) => !(gameData.killList || []).includes(player)
-      );
-      const aliveVotesCast = Object.keys(currentVotes).filter(
-        (voter) => alivePlayers.includes(voter)
-      ).length;
-
-      // If all alive players have voted, end voting
-      if (aliveVotesCast > 0 && aliveVotesCast === alivePlayers.length && !votingEnded) {
-        handleVoteEnd(currentVotes);
-      }
-
-      // Navigate back to countdown when meeting ends
-      if (!gameData.meetingCalled && votingEnded) {
-        setTimeout(() => {
-          updateDoc(gameRef, { meetingCalled: false, votingResult: {}, votes: {} });
-          navigate(`/countdown/${gameCode}`, { state: { playerName } });
-        }, 5000);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, playerName, navigate, votingEnded]);
-
-  // Navigation sync when page becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (!document.hidden && gameCode && playerName) {
-        console.log('[VotingPage] Page foregrounded, syncing navigation state');
-        const gameRef = doc(db, "games", gameCode);
-        const docSnapshot = await getDoc(gameRef);
-
-        if (!docSnapshot.exists()) {
-          navigate("/");
-          return;
-        }
-
-        const gameData = docSnapshot.data();
-        const roles = gameData.roles || {};
-
-        if (gameData.gameEnded) {
-          const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
-          navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-        } else if (!gameData.gameStarted) {
-          navigate(`/lobby/${gameCode}`, { state: { playerName, gameStarted: false } });
-        } else if (!gameData.meetingCalled && !votingEnded) {
-          navigate(`/countdown/${gameCode}`, { state: { playerName } });
-        }
-      }
+    const attempt = () => {
+      if (document.hidden) return;
+      if (!shouldResolveMeeting(gameData)) return;
+      closeMeeting(gameCode);
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [gameCode, playerName, navigate, votingEnded]);
+    const timer = setTimeout(attempt, myTurnDelay);
+    return () => clearTimeout(timer);
+  }, [gameData, meetingCalled, gameCode, myTurnDelay]);
 
-  // Display voting result character by character
   useEffect(() => {
-    if (votingResult) {
-      setDisplayedResult('');
-      for (let i = 0; i < votingResult.length; i++) {
-        setTimeout(() => {
-          setDisplayedResult((prev) => prev + votingResult[i]);
-        }, i * 100);
-      }
+    if (!meetingCalled || !voteDeadline) {
+      setSecondsLeft(null);
+      return undefined;
     }
+    const update = () => setSecondsLeft(Math.max(0, Math.ceil((voteDeadline - Date.now()) / 1000)));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [meetingCalled, voteDeadline]);
+
+  useEffect(() => {
+    if (!votingResult) {
+      setDisplayedResult('');
+      return undefined;
+    }
+    setDisplayedResult('');
+    let index = 0;
+    const timer = setInterval(() => {
+      index += 1;
+      setDisplayedResult(votingResult.slice(0, index));
+      if (index >= votingResult.length) clearInterval(timer);
+    }, 40);
+    return () => clearInterval(timer);
   }, [votingResult]);
 
-  const handleVoteEnd = async (votes) => {
-    const gameRef = doc(db, "games", gameCode);
-    const gameData = (await getDoc(gameRef)).data();
-  
-    votes = votes || gameData.votes || {};  // Retrieve votes if not passed
-    const voteCounts = {};
-  
-    // Count the votes
-    Object.values(votes).forEach((vote) => {
-      voteCounts[vote] = (voteCounts[vote] || 0) + 1;
-    });
+  const forceEndVote = useCallback(() => closeMeeting(gameCode, { force: true }), [gameCode]);
 
-    // Find the player with the majority of votes, or "skip"
-    const highestVoteCount = Math.max(...Object.values(voteCounts));
-    const candidatesWithHighestVotes = Object.keys(voteCounts).filter(
-        (candidate) => voteCounts[candidate] === highestVoteCount
-    );
+  const submitVote = async () => {
+    if (!selectedVote || myVote) return;
+    await updateGame(gameCode, { [`votes.${playerName}`]: selectedVote });
+  };
 
-    let resultMessage = '';
-  
-    // If there's a tie or no majority, no one is voted out
-    if (candidatesWithHighestVotes.length > 1 || highestVoteCount === 1) {
-        resultMessage = "No one was voted out due to a tie.";
-    } else if (candidatesWithHighestVotes[0] === 'skip') {
-        // If "skip" has the majority, handle skip vote
-        resultMessage = "The vote was skipped.";
-    } else {
-        // Handle the voted-out player
-        const votedOutPlayer = candidatesWithHighestVotes[0];
-        const isImposter = gameData.roles[votedOutPlayer] === 'Imposter';
+  const handleMarkAsKilled = async () => {
+    if (!selectedKillPlayer) return;
 
-        if (isImposter) {
-            resultMessage = `${votedOutPlayer} was an Imposter and was voted out!`;
-        } else {
-            resultMessage = `${votedOutPlayer} was not an Imposter and was voted out.`;
-        }
-        safeWrite({
-            killList: arrayUnion(votedOutPlayer)  // Mark the player as dead
-          });
+    const nextKillList = [...deadPlayers, selectedKillPlayer];
+    setIsDialogOpen(false);
+    setSelectedKillPlayer('');
+
+    const ok = await updateGame(gameCode, { killList: nextKillList });
+    if (!ok) return;
+
+    const winner = decideOutcome(roles, nextKillList);
+    if (winner) {
+      await updateGame(gameCode, {
+        gameEnded: true,
+        winner,
+        meetingCalled: false,
+        voteDeadline: deleteField(),
+        resultUntil: deleteField()
+      });
     }
-    setVotingResult(resultMessage);
-    setVotingEnded(true);
+  };
 
-    // Reset the meetingCalled flag and store voting result
-    safeWrite({ meetingCalled: false, votingResult: resultMessage });
-
-    // Check if all imposters are gone or only one crewmate is left
-    const remainingImposters = Object.keys(gameData.roles).filter(
-      (player) => gameData.roles[player] === 'Imposter' && !gameData.killList.includes(player)
-    ).length;
-
-    const remainingCrewmates = Object.keys(gameData.roles).filter(
-      (player) => gameData.roles[player] === 'Crewmate' && !gameData.killList.includes(player)
-    ).length;
-
-    if (remainingImposters === 0) {
-        // Log for debugging
-        console.log('All imposters are voted out. Crewmates win!');
-        
-        // Set the gameEnded flag and the winner
-        safeWrite({ gameEnded: true, winner: 'Crewmates' });
-        
-    } else if (remainingCrewmates <= 1) {
-        // Log for debugging
-        console.log('Less than 1 crewmate alive. Imposters win!');
-        
-        // Set the gameEnded flag and the winner
-        safeWrite({ gameEnded: true, winner: 'Imposters' });
-    } else {
-        // Log the state for further debugging
-        console.log('Game continues. Imposters remaining:', remainingImposters, 'Crewmates remaining:', remainingCrewmates);
-    }
-};
-
-const checkIfAllKillsCompleted = async (updatedKillList) => {
-  const gameRef = doc(db, "games", gameCode);
-  const gameData = (await getDoc(gameRef)).data();
-  const roles = gameData.roles || {};
-
-  const aliveCrewmates = Object.keys(roles).filter(
-    (player) => roles[player] === 'Crewmate' && !updatedKillList.includes(player)
-  );
-  const aliveImposters = Object.keys(roles).filter(
-    (player) => roles[player] === 'Imposter' && !updatedKillList.includes(player)
-  );
-
-  if (aliveImposters.length >= aliveCrewmates.length) {
-    // Navigate to the Game Over screen and pass lose state
-    navigate(`/gameover/${gameCode}`, { state: { playerName, result: 'lose' } });
-    safeWrite({ gameEnded: true });
+  if (loading) {
+    return <div className="voting-page"><ConnectionBanner connected={connected} />Loading…</div>;
   }
-};
 
-const handleMarkAsKilled = async () => {
-  if (!selectedKillPlayer) return;
-
-  const gameRef = doc(db, "games", gameCode);
-  const gameData = (await getDoc(gameRef)).data();
-  const currentKillList = gameData.killList || [];
-  const updatedKillList = [...currentKillList, selectedKillPlayer];
-
-
-  safeWrite({killList: updatedKillList});
-
-  setIsDialogOpen(false);
-  setSelectedKillPlayer('');
-  checkIfAllKillsCompleted(updatedKillList)
-};
-
-const submitVote = () => {
-    if (!selectedVote) {
-      alert('Please select a player to vote or skip!');
-      return;
-    }
-
-    const gameRef = doc(db, "games", gameCode);
-    safeWrite({[`votes.${playerName}`]: selectedVote});
-
-    // Update the confirmation message based on the player's choice
-    if (selectedVote === 'skip') {
-      setVoteConfirmation("You skipped voting.");
-    } else {
-      setVoteConfirmation(`You voted for: ${selectedVote}`);
-    }
-
-    setVoteSubmitted(true);
-};
-
-  // Ensure voting result is displayed to all players and everyone navigates back to the game
-  useEffect(() => {
-    const gameRef = doc(db, "games", gameCode);
-
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const gameData = docSnapshot.data();
-
-        // Show voting result for 5 seconds, then navigate back to the game
-        if (!gameData.meetingCalled && votingEnded) {
-          setTimeout(() => {
-            safeWrite({ meetingCalled: false, votingResult: {}, votes: {} });
-            navigate(`/countdown/${gameCode}`, { state: { playerName } });
-          }, 5000);
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, [gameCode, navigate, playerName, votingEnded]);
-
-  const isAlive = !deadPlayers.includes(playerName);
+  const waitingLine = `${votesCast}/${alivePlayers.length} voted`;
+  const timerLine = secondsLeft !== null ? ` · vote ends in ${secondsLeft}s` : '';
 
   return (
     <div className="voting-page">
-    <div className="voting-card-container">
-      <h2>Emergency Meeting called by {meetingCaller}</h2>
-      {!votingEnded ? (
-        !voteSubmitted && (
+      <ConnectionBanner connected={connected} />
+      <div className="voting-card-container">
+        <h2>Emergency Meeting called by {meetingCaller}</h2>
+
+        {votingEnded ? (
+          <div className="voting-result">
+            <h3>{displayedResult}</h3>
+          </div>
+        ) : myVote ? (
+          <>
+            <p>{myVote === 'skip' ? 'You skipped voting.' : `You voted for: ${myVote}`}</p>
+            <p className="vote-progress">Waiting for other players… ({waitingLine}{timerLine})</p>
+            {isCreator && <button className="end-game-btn" onClick={forceEndVote}>End Vote Now</button>}
+            <DeadPlayersList deadPlayers={deadPlayers} />
+          </>
+        ) : (
           <>
             <div className="voting-grid">
-              {players
-              .filter((player) => !deadPlayers.includes(player))
-              .map((player, index) => (
-                <div 
-                  key={index} 
+              {alivePlayers.map((player) => (
+                <div
+                  key={player}
                   className={`voting-card ${selectedVote === player ? 'selected' : ''}`}
                   onClick={() => setSelectedVote(player)}
                 >
@@ -330,35 +197,43 @@ const submitVote = () => {
                 </div>
               ))}
             </div>
-            <div 
+
+            <div
               className={`voting-card ${selectedVote === 'skip' ? 'selected' : ''}`}
               onClick={() => setSelectedVote('skip')}
             >
               <span>Skip Vote</span>
             </div>
+
             {role === 'Imposter' && isAlive && (
               <label className="voting-card" onClick={() => setIsDialogOpen(true)}>
                 <span>Kill Crewmate</span>
               </label>
             )}
-            {isAlive && ( // Show submit button only if player is alive
-              <button className="submit-vote-button" onClick={submitVote}>Submit Vote</button>
+
+            {isAlive && (
+              <button className="submit-vote-button" onClick={submitVote} disabled={!selectedVote}>
+                Submit Vote
+              </button>
             )}
+
+            <p className="vote-progress">{waitingLine}{timerLine}</p>
+            {isCreator && <button className="end-game-btn" onClick={forceEndVote}>End Vote Now</button>}
             <DeadPlayersList deadPlayers={deadPlayers} />
+
             {isDialogOpen && (
               <div className="dialog-overlay">
                 <div className="dialog">
                   <h3>Select a player to mark as killed:</h3>
                   <ul>
                     {players
-                      .filter(player => 
-                        !deadPlayers.includes(player) && // Not already dead
-                        player !== playerName && // Not the current player
-                        roles[player] !== 'Imposter' // Not an imposter
-                      )
-                      .map((player, index) => (
-                        <li 
-                          key={index} 
+                      .filter((player) =>
+                        !deadPlayers.includes(player) &&
+                        player !== playerName &&
+                        roles[player] !== 'Imposter')
+                      .map((player) => (
+                        <li
+                          key={player}
                           onClick={() => setSelectedKillPlayer(player)}
                           className={`kill-item ${selectedKillPlayer === player ? 'selected' : ''}`}
                         >
@@ -366,7 +241,7 @@ const submitVote = () => {
                         </li>
                       ))}
                   </ul>
-                  <button className='end-game-btn' onClick={() => handleMarkAsKilled()} disabled={!selectedKillPlayer}>
+                  <button className="end-game-btn" onClick={handleMarkAsKilled} disabled={!selectedKillPlayer}>
                     Confirm Kill
                   </button>
                   <button className="submit-vote-button" onClick={() => setIsDialogOpen(false)}>Cancel</button>
@@ -374,15 +249,9 @@ const submitVote = () => {
               </div>
             )}
           </>
-        )
-      ) : (
-        <div className="voting-result">
-          <h3>{displayedResult}</h3>
-        </div>
-      )}
-      {voteConfirmation && <p>{voteConfirmation}</p>}
+        )}
+      </div>
     </div>
-  </div>
   );
 }
 

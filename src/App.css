@@ -360,3 +360,21 @@ button:hover, .vote-button:hover, .submit-vote-button:hover, .join-button:hover 
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
+.connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 8px 12px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  background: #f5c451;
+}
+
+.vote-progress {
+  opacity: 0.75;
+  font-size: 14px;
+}

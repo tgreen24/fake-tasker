@@ -1,52 +1,76 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { db } from './firebase';  // Firestore config
-import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";  // Firestore functions
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { db } from './firebase';
+import { saveSession } from './session';
+
+const MAX_PLAYERS = 25;
 
 function JoinGame() {
   const [gameCode, setGameCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const location = useLocation();  // Get the location object to access passed state
+  const [joining, setJoining] = useState(false);
+  const location = useLocation();
   const navigate = useNavigate();
-  
-  // Get the player name from the Home screen
-  const playerName = location.state?.playerName || '';
-  const maxPlayers = 25; // Define max players here
+
+  const playerName = (location.state?.playerName || '').trim();
 
   const handleJoinGame = async (e) => {
     e.preventDefault();
 
-    // Firestore reference to the game document
-    const gameRef = doc(db, "games", gameCode);
+    if (!playerName) {
+      navigate('/');
+      return;
+    }
+
+    const code = gameCode.trim().toUpperCase();
+    const gameRef = doc(db, 'games', code);
+
+    setJoining(true);
+    setErrorMessage('');
 
     try {
-      // Check if the game exists
       const gameDoc = await getDoc(gameRef);
 
-      if (gameDoc.exists()) {
-        const gameData = gameDoc.data();
-        const currentPlayers = gameData.players || [];
+      if (!gameDoc.exists()) {
+        setErrorMessage('Invalid game code. Please try again.');
+        return;
+      }
 
-        // Check if the game is already full
-        if (currentPlayers.length >= maxPlayers) {
-          setErrorMessage("The game is full. Please try another game.");
+      const gameData = gameDoc.data();
+      const currentPlayers = gameData.players || [];
+      const alreadySeated = currentPlayers.includes(playerName);
+
+      // Reclaiming your own seat after losing the tab is a reconnect, not a join.
+      if (gameData.gameStarted) {
+        if (!alreadySeated) {
+          setErrorMessage('That game is already in progress.');
           return;
         }
-
-        // If the game exists and isn't full, add the player to the Firestore document
-        await updateDoc(gameRef, {
-          players: arrayUnion(playerName)  // Add the player from the Home screen
-        });
-
-        // Redirect to the GameLobby with the game code and player name
-        navigate(`/lobby/${gameCode}`, { state: { playerName, isCreator: false } });
-      } else {
-        // If the game does not exist, show an error message
-        setErrorMessage("Invalid game code. Please try again.");
+        saveSession(code, playerName);
+        navigate(`/lobby/${code}`, { state: { playerName } });
+        return;
       }
+
+      if (alreadySeated) {
+        setErrorMessage(`Someone in this game is already called "${playerName}". Go back and pick another name.`);
+        return;
+      }
+
+      if (currentPlayers.length >= MAX_PLAYERS) {
+        setErrorMessage('The game is full. Please try another game.');
+        return;
+      }
+
+      await updateDoc(gameRef, { players: arrayUnion(playerName) });
+
+      saveSession(code, playerName);
+      navigate(`/lobby/${code}`, { state: { playerName } });
     } catch (error) {
-      console.error("Error joining game: ", error);
-      setErrorMessage("Something went wrong. Please try again.");
+      console.error('Error joining game: ', error);
+      setErrorMessage('Something went wrong. Please try again.');
+    } finally {
+      setJoining(false);
     }
   };
 
@@ -63,7 +87,9 @@ function JoinGame() {
             required
             className="join-input"
           />
-          <button type="submit" className="join-button">Join Game</button>
+          <button type="submit" className="join-button" disabled={joining}>
+            {joining ? 'Joining…' : 'Join Game'}
+          </button>
         </form>
         {errorMessage && <p className="error-message">{errorMessage}</p>}
       </div>

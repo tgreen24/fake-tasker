@@ -1,73 +1,127 @@
-import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { doc, onSnapshot, getDocFromServer } from 'firebase/firestore';
 import { db } from '../firebase';
+import { routeForState } from '../gameRoute';
 
-/**
- * Custom hook to sync game state from Firestore and handle navigation
- * This consolidates multiple onSnapshot listeners into one
- */
-export function useGameSync(gameCode, playerName, navigate) {
+const ROUTE_TICK_MS = 1000;
+const MAX_BACKOFF_MS = 15000;
+
+export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
+  const navigate = useNavigate();
   const [gameData, setGameData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [connected, setConnected] = useState(true);
+
+  const dataRef = useRef(null);
+  const connectedRef = useRef(true);
+  const routeRef = useRef(null);
+
+  routeRef.current = (data) => {
+    if (!gameCode) return;
+    if (!playerName) {
+      navigate('/', { replace: true });
+      return;
+    }
+    const target = routeForState(data, playerName, gameCode);
+    if (target === window.location.pathname) return;
+    navigate(target, { state: { playerName }, replace: true });
+  };
 
   useEffect(() => {
-    if (!gameCode) return;
+    if (!gameCode || !enabled) return undefined;
 
-    const gameRef = doc(db, "games", gameCode);
+    let cancelled = false;
+    let unsubscribe = null;
+    let retryTimer = null;
+    let backoff = 1000;
 
-    const unsubscribe = onSnapshot(gameRef, (docSnapshot) => {
-      if (!docSnapshot.exists()) {
-        console.log("Game deleted. Navigating to home...");
-        navigate("/");
+    const gameRef = doc(db, 'games', gameCode);
+
+    const markConnected = (value) => {
+      connectedRef.current = value;
+      setConnected(value);
+    };
+
+    const receive = (snapshot) => {
+      if (cancelled) return;
+      backoff = 1000;
+      markConnected(!snapshot.metadata.fromCache);
+
+      if (!snapshot.exists()) {
+        dataRef.current = null;
+        setGameData(null);
+        setLoading(false);
+        routeRef.current(null);
         return;
       }
 
-      const data = docSnapshot.data();
+      const data = snapshot.data();
+      dataRef.current = data;
       setGameData(data);
       setLoading(false);
-    });
+      routeRef.current(data);
+    };
 
-    // Handle navigation sync when page becomes visible
-    const handleVisibilityChange = () => {
-      if (!document.hidden && gameData && playerName) {
-        handleNavigationSync(gameData, playerName, gameCode, navigate);
+    // A dropped listener is never retried by the SDK, so rebuild it ourselves.
+    const fail = (error) => {
+      if (cancelled) return;
+      console.error('[useGameSync] snapshot listener dropped', error);
+      markConnected(false);
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      retryTimer = setTimeout(subscribe, backoff);
+      backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
+    };
+
+    function subscribe() {
+      if (cancelled) return;
+      unsubscribe = onSnapshot(gameRef, receive, fail);
+    }
+
+    const resync = async () => {
+      if (cancelled || document.hidden) return;
+      try {
+        receive(await getDocFromServer(gameRef));
+      } catch (error) {
+        if (cancelled) return;
+        console.warn('[useGameSync] forced resync failed', error);
+        markConnected(false);
+        if (dataRef.current) routeRef.current(dataRef.current);
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    // pageshow covers iOS Safari bfcache restores, which skip visibilitychange.
+    const onForeground = () => {
+      if (document.hidden) return;
+      if (dataRef.current) routeRef.current(dataRef.current);
+      resync();
+    };
+
+    const tick = () => {
+      if (document.hidden) return;
+      if (dataRef.current) routeRef.current(dataRef.current);
+      if (!connectedRef.current) resync();
+    };
+
+    subscribe();
+    document.addEventListener('visibilitychange', onForeground);
+    window.addEventListener('pageshow', onForeground);
+    window.addEventListener('focus', onForeground);
+    window.addEventListener('online', onForeground);
+    const tickTimer = setInterval(tick, ROUTE_TICK_MS);
 
     return () => {
-      unsubscribe();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+      if (retryTimer) clearTimeout(retryTimer);
+      clearInterval(tickTimer);
+      document.removeEventListener('visibilitychange', onForeground);
+      window.removeEventListener('pageshow', onForeground);
+      window.removeEventListener('focus', onForeground);
+      window.removeEventListener('online', onForeground);
     };
-  }, [gameCode, navigate]);
+  }, [gameCode, enabled]);
 
-  // Sync navigation on mount
-  useEffect(() => {
-    if (gameData && playerName && !document.hidden) {
-      handleNavigationSync(gameData, playerName, gameCode, navigate);
-    }
-  }, [gameData, playerName, gameCode, navigate]);
-
-  return { gameData, loading };
-}
-
-/**
- * Helper function to handle navigation based on game state
- */
-function handleNavigationSync(gameData, playerName, gameCode, navigate) {
-  const currentPath = window.location.pathname;
-
-  // Check if we should be on a different screen
-  if (gameData.gameEnded && !currentPath.includes('/gameover')) {
-    const roles = gameData.roles || {};
-    const result = roles[playerName] === 'Crewmate' && gameData.completedTasks ? 'win' : 'lose';
-    navigate(`/gameover/${gameCode}`, { state: { playerName, result } });
-  } else if (gameData.meetingCalled && !currentPath.includes('/voting')) {
-    navigate(`/voting/${gameCode}`, { state: { playerName } });
-  } else if (gameData.gameStarted && !gameData.gameEnded && !currentPath.includes('/countdown')) {
-    navigate(`/countdown/${gameCode}`, { state: { playerName } });
-  } else if (!gameData.gameStarted && !gameData.gameEnded && !currentPath.includes('/lobby')) {
-    navigate(`/lobby/${gameCode}`, { state: { playerName } });
-  }
+  return { gameData, loading, connected };
 }
