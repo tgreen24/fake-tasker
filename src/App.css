@@ -378,3 +378,20 @@ button:hover, .vote-button:hover, .submit-vote-button:hover, .join-button:hover 
   opacity: 0.75;
   font-size: 14px;
 }
+
+.app-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-gate-card {
+  text-align: center;
+  max-width: 320px;
+}
+
+.app-gate-card p {
+  opacity: 0.8;
+}

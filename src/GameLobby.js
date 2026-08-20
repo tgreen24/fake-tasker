@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, deleteDoc, updateDoc, arrayRemove, arrayUnion, deleteField } from 'firebase/firestore';
+import { doc, deleteDoc, updateDoc, arrayRemove, arrayUnion, deleteField, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { updateGame } from './db';
 import { usePlayerName } from './hooks/usePlayerName';
@@ -8,6 +8,7 @@ import { useGameSync } from './hooks/useGameSync';
 import ConnectionBanner from './components/ConnectionBanner';
 
 const MAX_PLAYERS = 25;
+const GAME_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 function shuffleArray(array) {
   const result = [...array];
@@ -153,6 +154,7 @@ function GameLobby() {
       sabotages: {},
       gameStarted: true,
       gameEnded: false,
+      expiresAt: Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS),
       meetingCalled: false,
       meetingCaller: deleteField(),
       voteDeadline: deleteField(),

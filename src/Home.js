@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { saveSession } from './session';
 
 const CODE_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const CODE_LENGTH = 6;
 const CODE_ATTEMPTS = 5;
+const GAME_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 function generateGameCode() {
   let code = '';
@@ -59,7 +60,8 @@ function Home() {
         imposterCount: 1,
         tasksPerCrewmate: 3,
         killCooldown: 30,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        expiresAt: Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS)
       });
 
       saveSession(gameCode, name);
