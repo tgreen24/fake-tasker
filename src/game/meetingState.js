@@ -1,3 +1,4 @@
+import { assignColors } from './playerColor';
 import { isHost } from './host';
 import { showingVoteResult } from '../gameRoute';
 import { alivePlayersOf, votesCastBy } from '../voteLogic';
@@ -16,6 +17,7 @@ export function deriveMeetingState(gameData, playerName, uid) {
   return {
     players,
     roles,
+    colors: assignColors(players),
     deadPlayers,
     alivePlayers,
     role: roles[playerName],
@@ -25,8 +27,11 @@ export function deriveMeetingState(gameData, playerName, uid) {
     meetingCalled: !!gameData?.meetingCalled,
     voteDeadline: gameData?.voteDeadline,
     votingResult,
+    ejected: gameData?.ejected || '',
+    ejectedWasImposter: roles[gameData?.ejected] === 'Imposter',
     votingEnded: showingVoteResult(gameData) || (!gameData?.meetingCalled && !!votingResult),
     myVote: votes[playerName],
+    ballot: alivePlayers.filter((player) => player !== playerName),
     votesCast: votesCastBy(gameData, alivePlayers),
     killableBy: (killer) => players.filter((player) =>
       !deadPlayers.includes(player) && player !== killer && roles[player] !== 'Imposter')

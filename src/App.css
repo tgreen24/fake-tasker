@@ -1,397 +1,993 @@
-/* Global Background */
-body, .home, .game-lobby, .join-game-container, .gameover-screen, .voting-page, .countdown-screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  text-align: center;
-  background: linear-gradient(135deg, #007bff, #3a4a58); /* Consistent blue gradient background */
-  color: #333;
-  margin: 0;
-  font-family: Arial, sans-serif;
+/* ── design tokens ─────────────────────────────────────────── */
+
+:root {
+  --bg: #070c14;
+  --bg-glow: #0d1826;
+  --surface: #101a27;
+  --surface-raised: #16222f;
+  --surface-sunk: #0b131d;
+  --border: #1f2d3f;
+  --border-strong: #2b3d52;
+
+  --text: #e7eef6;
+  --text-dim: #93a6bb;
+  --text-faint: #6b7f95;
+
+  --accent: #2f6bff;
+  --accent-hover: #4a80ff;
+  --accent-soft: rgba(47, 107, 255, 0.15);
+
+  --danger: #e5484d;
+  --danger-hover: #f0605f;
+  --danger-soft: rgba(229, 72, 77, 0.14);
+
+  --success: #2ecc71;
+  --success-soft: rgba(46, 204, 113, 0.14);
+  --warn: #f5b301;
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --gap: 14px;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 12px 32px -18px rgba(0, 0, 0, .9);
+  --ring: 0 0 0 3px var(--accent-soft);
 }
 
-/* Card Containers */
-.home-card, .join-game-card, .background-overlay {
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  max-width: 400px;
-  width: 90%;
-  color: #333;
+/* ── shell ─────────────────────────────────────────────────── */
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+.home,
+.join-game-container,
+.game-lobby,
+.countdown-screen,
+.voting-page,
+.gameover-screen,
+.app-gate {
+  min-height: 100vh;
+  padding: 20px 16px 40px;
+  background:
+    radial-gradient(1100px 620px at 50% -10%, var(--bg-glow) 0%, transparent 70%),
+    var(--bg);
+  box-sizing: border-box;
+}
+
+.home,
+.join-game-container,
+.app-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.background-overlay,
+.lobby-content,
+.game-content,
+.gameover-content,
+.voting-card-container {
+  max-width: 460px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* ── cards ─────────────────────────────────────────────────── */
+
+.home-card,
+.join-game-card,
+.app-gate-card,
+.players-list,
+.task-section,
+.creator-controls,
+.voting-card-container > .voting-grid,
+.dead-players-list,
+.progress-bar-container,
+.fellow-imposters,
+.task-list,
+.kill-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+}
+
+.home-card,
+.join-game-card,
+.app-gate-card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.creator-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── type ──────────────────────────────────────────────────── */
+
+h1 { font-size: 2rem; margin: 0; letter-spacing: -0.02em; }
+h2 { font-size: 1.25rem; margin: 0; letter-spacing: -0.01em; }
+
+h3,
+.players-list h3,
+.task-section h3,
+.dead-players-list h3 {
+  margin: 0 0 12px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+p { margin: 0; }
+
+.vote-progress,
+.fellow-imposters p {
+  color: var(--text-dim);
+  font-size: .85rem;
+}
+
+.error-message {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid rgba(229, 72, 77, .3);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: .88rem;
+}
+
+/* ── game code ─────────────────────────────────────────────── */
+
+.lobby-header { max-width: 460px; margin: 0 auto var(--gap); }
 
 .game-code {
-  background: #e0e0e0;
-  padding: 10px 20px;
-  border-radius: 8px;
-  margin: 12px 0;
-  font-size: 1.1em;
-  font-weight: bold;
-}
-
-.players-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
-  margin-top: 15px;
-  padding: 10px;
-}
-
-/* Headings and Typography */
-h1, h2, h3 {
-  color: #333;
-  margin: 0 0 15px;
-}
-
-h1 {
-  font-size: 2rem;
-}
-
-h2 {
-  font-size: 1.6rem;
-}
-
-h3 {
-  font-size: 1.3rem;
-  color: #555;
-}
-
-/* Input Fields */
-.name-input, .join-input {
-  padding: 10px;
-  font-size: 1rem;
-  width: 90%;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
   text-align: center;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  box-shadow: var(--shadow);
 }
 
-/* Buttons */
-button, .vote-button, .join-button {
-  background-color: #28a745;
-  padding: 10px;
-  font-size: 1rem;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.3s ease;
-  margin-top: 10px;
+.game-code strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 2.4rem;
+  letter-spacing: .12em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
-.submit-vote-button, .vote-button, .join-button { background-color: #007bff; }
-
-button:hover, .vote-button:hover, .submit-vote-button:hover, .join-button:hover {
-  opacity: 0.9;
-}
-
-/* Emergency Meeting Button */
-.emergency-meeting-btn {
-  background-color: #e74c3c; /* Red background */
-  color: #fff;
-  padding: 1rem 2rem;
-  font-size: 1.25rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-/* End Game Button */
-.end-game-btn {
-  background-color: #3498db; /* Blue background */
-  color: white;
-  padding: 1rem 2rem;
-  font-size: 1.25rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-/* Countdown Timer */
-.countdown-timer {
-  font-size: 4rem;
-  animation: scale-up 1s ease-in-out infinite;
-}
-
-@keyframes scale-up {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-}
-
-.voting-card-container {
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 30px;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  text-align: center;
-  max-width: 600px;
-  width: 90%;
-}
-
-/* Voting and Task Lists */
-.voting-card, .task-item, .kill-item {
-  border: 2px solid rgba(0, 0, 0, 0.5);
-  padding: 15px;
-  border-radius: 8px;
-  text-align: center;
-  cursor: pointer;
-  transition: background 0.3s ease;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  color: #333;
-  margin-bottom: 10px;
-}
-
-.voting-card.selected, .task-item.selected, .kill-item.selected {
-  background-color: rgba(0, 150, 136, 0.3);
-  border: 2px solid #009688;
-  position: relative;
-}
-
-.voting-card.selected::after, .task-item.selected::after, .kill-item.selected::after {
-  content: '✔'; /* Unicode for checkmark */
-  font-size: 1.5rem;
-  color: #009688;
-  position: absolute;
-  top: 50%;
-  right: 10%;
-  transform: translate(-50%, -50%);
-}
-
-.task-list, .kill-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 15px;
-  margin: 20px 0;
-  width: 90%;
-  max-width: 600px;
-  justify-content: center;
-}
-
-/* Game Over and Winning Team */
-.winning-team {
-  font-size: 2.5rem;
-  font-weight: bold;
-}
-
-/* Red color for Imposters */
-.imposters-win {
-  color: #e74c3c;
-}
-
-/* Green color for Crewmates */
-.crewmates-win {
-  color: #28a745;
-}
-
-
-.player-result {
-  font-size: 1.2rem;
-  font-weight: bold;
-  margin-bottom: 30px;
-}
-
-/* Mobile Adjustments */
-@media (max-width: 768px) {
-  h1 { font-size: 1.8rem; }
-  h2 { font-size: 1.4rem; }
-  .countdown-timer { font-size: 3rem; }
-  .background-overlay, .home-card, .game-lobby, .join-game-card {
-    padding: 20px;
-  }
-}
-
-/* Game Lobby Layout */
-.game-lobby {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-  max-width: 800px;
-  width: 90%;
-}
-
-.lobby-header {
-  text-align: center;
-  margin-bottom: 15px;
-}
-
-.lobby-content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 100%;
-}
-
-.player-grid, .task-section {
-  background: #f0f0f0;
-  padding: 15px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+/* ── players ───────────────────────────────────────────────── */
 
 .player-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 12px;
 }
 
-.player-card, .task-item {
-  background: #ffffff;
-  padding: 10px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  text-align: center;
-  font-weight: bold;
-}
-
-.player-card.highlight {
-  color: #28a745; /* Green text color for highlighted player */
-  font-weight: bold;
-}
-
-.controls {
+.player-card {
+  position: relative;
   display: flex;
-  gap: 10px;
-  margin-top: 15px;
-}
-
-.start-game-btn {
-  background-color: #28a745;
-  color: #fff;
-}
-
-.end-game-btn {
-  background-color: #f44336;
-  color: #fff;
-}
-
-.task-input {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.task-input input {
-  flex: 1;
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #ddd;
-}
-
-.imposter-select {
-  margin-top: 15px;
-}
-
-/* Responsive Layout for Smaller Screens */
-@media (max-width: 768px) {
-  .lobby-content {
-    grid-template-columns: 1fr;
-  }
-}
-
-.dead-players-list {
-  background-color: rgba(255, 0, 0, 0.1);
-  padding: 10px;
-  border-radius: 8px;
-  margin-top: 20px;
-  margin-bottom: 20px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: .8rem;
+  color: var(--text-dim);
+  word-break: break-word;
   text-align: center;
 }
 
-.dead-players-list h3 {
-  font-size: 1.2rem;
-  color: #ff4d4d;
-  margin-bottom: 10px;
+.player-card.highlight { color: var(--text); font-weight: 600; }
+
+.avatar {
+  --hex: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
+  position: relative;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  clip-path: var(--hex);
+  background: var(--player-color, var(--accent));
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: .04em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .45);
 }
 
-.dead-player {
+/* Rim drawn as an inset layer, since clip-path cuts a normal border off. */
+.avatar::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  clip-path: var(--hex);
+  background:
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--player-color, var(--accent)) 78%, #ffffff 22%) 0%,
+      var(--player-color, var(--accent)) 45%,
+      color-mix(in srgb, var(--player-color, var(--accent)) 62%, #000000 38%) 100%);
+}
+
+.avatar > * ,
+.avatar { z-index: 0; }
+.avatar::before { z-index: -1; }
+
+.avatar-hollow {
+  background: color-mix(in srgb, var(--player-color, var(--accent)) 55%, #050a12 45%);
+  color: #fff;
+}
+
+.avatar-hollow::before {
+  background:
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--player-color, var(--accent)) 34%, #0a121c 66%) 0%,
+      color-mix(in srgb, var(--player-color, var(--accent)) 18%, #0a121c 82%) 100%);
+}
+
+.player-card .kick-button {
+  position: absolute;
+  top: -4px;
+  right: 4px;
+}
+
+.player-slot {
+  display: grid;
+  place-items: center;
+  height: 56px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+}
+
+/* ── buttons ───────────────────────────────────────────────── */
+
+button {
+  font: inherit;
+  font-weight: 600;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 13px 18px;
+  cursor: pointer;
+  color: #fff;
+  background: var(--accent);
+  transition: background .15s ease, transform .05s ease, opacity .15s ease;
+}
+
+button:hover:not(:disabled) { background: var(--accent-hover); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.join-button,
+.submit-vote-button {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.join-button:hover:not(:disabled),
+.submit-vote-button:hover:not(:disabled) { background: var(--surface); }
+
+.start-game-btn { background: var(--accent); }
+
+.end-game-btn,
+.reset-sabotage-btn {
+  background: transparent;
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1px rgba(229, 72, 77, .45);
+}
+
+.end-game-btn:hover:not(:disabled),
+.reset-sabotage-btn:hover:not(:disabled) { background: var(--danger-soft); }
+
+.emergency-meeting-btn {
+  background: var(--danger);
   font-size: 1rem;
-  color: #ff4d4d;
+  letter-spacing: .02em;
 }
+
+.emergency-meeting-btn:hover:not(:disabled) { background: var(--danger-hover); }
+
+.kick-button {
+  padding: 0;
+  width: 22px;
+  height: 22px;
+  line-height: 1;
+  font-size: .75rem;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--text-dim);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.kick-button:hover { background: var(--danger); color: #fff; }
+
+.controls,
+.buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── inputs ────────────────────────────────────────────────── */
+
+input[type='text'],
+select {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunk);
+  color: var(--text);
+}
+
+input[type='text']::placeholder { color: var(--text-faint); }
+input[type='text']:focus,
+select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+
+.join-form { display: flex; flex-direction: column; gap: 12px; }
+
+.task-input { display: flex; gap: 8px; margin-top: 12px; }
+.task-input input { flex: 1; }
+.task-input button { flex: 0 0 auto; }
+
+.imposter-select,
+.kill-cooldown-selection,
+.task-count-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.imposter-select label,
+.kill-cooldown-selection label,
+.task-count-selection label {
+  font-size: .82rem;
+  color: var(--text-dim);
+}
+
+.imposter-select select,
+.kill-cooldown-selection select,
+.task-count-selection select { width: auto; min-width: 120px; }
+
+/* ── lists: tasks, kills, votes ────────────────────────────── */
+
+ul { list-style: none; margin: 0; padding: 0; }
+
+.task-list ul,
+.kill-list ul,
+.dialog ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-section ul { display: flex; flex-direction: column; gap: 8px; }
+
+.task-item,
+.kill-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.task-item:hover,
+.kill-item:hover { border-color: var(--border-strong); }
+
+.task-item:focus-visible,
+.kill-item:focus-visible,
+.voting-card:focus-visible { outline: none; box-shadow: var(--ring); }
+
+.task-list .task-item::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+
+.task-item.selected {
+  color: var(--text-dim);
+  border-color: rgba(46, 204, 113, .4);
+  background: var(--success-soft);
+}
+
+.task-list .task-item.selected::after {
+  border-color: var(--success);
+  background: var(--success);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.kill-item.selected {
+  border-color: rgba(229, 72, 77, .5);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.kill-item label,
+.sabotage-option-btn { cursor: pointer; }
+
+.task-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  font-size: .92rem;
+}
+
+/* ── timers ────────────────────────────────────────────────── */
+
+.timer-bar {
+  --timer-color: var(--danger);
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timer-warn { --timer-color: var(--warn); }
+
+.timer-label {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.timer-clock {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--timer-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-segments {
+  display: flex;
+  gap: 4px;
+}
+
+.timer-segments span {
+  flex: 1;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--border);
+  transition: background .3s ease;
+}
+
+.timer-segments span.lit { background: var(--timer-color); }
+
+/* ── progress ──────────────────────────────────────────── */
 
 .progress-bar-container {
-  background-color: #e0e0e0;
-  border-radius: 8px;
-  width: 100%;
-  height: 20px;
-  margin: 10px 0;
-  overflow: hidden;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-bar-container::before {
+  content: 'Progress';
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
 
 .progress-bar {
-  background-color: #4caf50; /* Green color for progress */
-  height: 100%;
-  border-radius: 8px 0 0 8px;
-  text-align: center;
-  color: white;
-  font-size: 0.9rem;
-  line-height: 20px; /* Centers text vertically */
+  height: 10px;
+  min-width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--success), #6ee79f);
+  color: transparent;
+  font-size: 0;
+  transition: width .35s ease;
 }
+
+/* ── round screen ──────────────────────────────────────────── */
+
+.player-info { text-align: center; }
+.player-name h2 { color: var(--text-dim); font-weight: 600; }
+
+.countdown { display: grid; place-items: center; min-height: 60vh; }
+
+.countdown-timer {
+  font-size: 1.6rem;
+  text-align: center;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.role-announcement {
+  text-align: center;
+  font-size: 1.6rem;
+  padding: 18px;
+  margin: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.role-announcement.Imposter { color: var(--danger); border-color: rgba(229, 72, 77, .4); }
+.role-announcement.Crewmate { color: var(--success); border-color: rgba(46, 204, 113, .35); }
+
+.cooldown-timer,
+.sabotage-cooldown {
+  margin-top: 10px;
+  text-align: center;
+  font-size: .85rem;
+  color: var(--warn);
+  font-variant-numeric: tabular-nums;
+}
+
+.fellow-imposters { margin-top: 10px; padding: 12px; }
+
+/* ── voting ────────────────────────────────────────────────── */
+
+.voting-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.voting-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: .82rem;
+  cursor: pointer;
+  text-align: center;
+  word-break: break-word;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.voting-card:hover { border-color: var(--border-strong); }
+
+.voting-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: var(--ring);
+}
+
+.voting-result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 18px;
+  text-align: center;
+  min-height: 90px;
+  display: grid;
+  place-items: center;
+}
+
+.voting-result h3 {
+  font-size: 1.15rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text);
+  margin: 0;
+}
+
+.dead-players-list { padding: 14px 16px; }
+.dead-player { color: var(--danger); font-size: .88rem; }
+
+/* ── dialog ────────────────────────────────────────────────── */
 
 .dialog-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(4, 8, 14, .78);
+  backdrop-filter: blur(3px);
 }
 
 .dialog {
-  background-color: white;
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
   padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow);
 }
+
+.dialog h3 { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 1rem; margin: 0; }
+
+/* ── game over ─────────────────────────────────────────────── */
+
+.gameover-content { text-align: center; gap: 18px; padding-top: 8vh; }
+
+.winning-team {
+  font-size: 2.2rem;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.crewmates-win { color: var(--success); }
+.imposters-win { color: var(--danger); }
+
+.player-result { color: var(--text-dim); font-weight: 600; }
+
+/* ── banners ───────────────────────────────────────────────── */
+
 .connection-banner {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
-  padding: 8px 12px;
+  z-index: 100;
+  padding: 9px 12px;
   text-align: center;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1a1a1a;
-  background: #f5c451;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: #1a1206;
+  background: var(--warn);
 }
 
-.vote-progress {
-  opacity: 0.75;
-  font-size: 14px;
+/* ── motion ────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
 }
 
-.app-gate {
+@media (max-width: 380px) {
+  .voting-grid { grid-template-columns: repeat(2, 1fr); }
+  .game-code strong { font-size: 2rem; }
+}
+
+/* ── moments ───────────────────────────────────────────────────
+   Every animated element's resting style is its FINAL state, and the
+   keyframes travel from an offset. So when motion is reduced and the
+   global rule kills animation, nothing is left invisible.            */
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(.72); }
+  60%  { opacity: 1; transform: scale(1.06); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ring-out {
+  from { opacity: .55; transform: scale(.4); }
+  to   { opacity: 0; transform: scale(1.5); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 34px -4px currentColor; }
+}
+
+@keyframes drift-down {
+  from { opacity: 1; transform: translateY(-14vh) rotate(0deg); }
+  to   { opacity: 0; transform: translateY(86vh) rotate(620deg); }
+}
+
+/* opening countdown */
+
+.countdown {
+  position: relative;
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  min-height: 62vh;
+}
+
+.countdown-rings {
+  position: absolute;
+  top: 34%;
+  display: grid;
+  place-items: center;
+}
+
+.countdown-rings span {
+  grid-area: 1 / 1;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: ring-out 2.4s ease-out infinite;
+}
+
+.countdown-rings span:nth-child(2) { animation-delay: .8s; }
+.countdown-rings span:nth-child(3) { animation-delay: 1.6s; }
+
+.countdown-number {
+  position: relative;
+  font-size: 6.5rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  animation: pop-in .5s cubic-bezier(.2, .9, .3, 1.3) both;
+}
+
+.countdown-timer {
+  position: relative;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.countdown-caption {
+  position: relative;
+  color: var(--text-faint);
+  font-size: .85rem;
+}
+
+/* role reveal */
+
+.role-reveal { animation: pop-in .55s cubic-bezier(.2, .9, .3, 1.3) both; }
+.role-reveal.Imposter { animation: pop-in .55s cubic-bezier(.2,.9,.3,1.3) both, glow-pulse 2.2s ease-in-out 1; }
+.role-reveal.Crewmate { animation: pop-in .55s cubic-bezier(.2,.9,.3,1.3) both, glow-pulse 2.2s ease-in-out 1; }
+
+/* ejection reveal */
+
+.ejection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.ejection-avatar {
+  animation: pop-in .5s cubic-bezier(.2, .9, .3, 1.3) both;
+  filter: grayscale(.55);
+  opacity: .85;
+}
+
+.ejection-avatar .avatar { width: 74px; height: 74px; font-size: 1.3rem; }
+
+.ejection-name {
+  font-size: 1.25rem;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  margin: 0;
+  animation: rise-in .45s ease .18s both;
+}
+
+.ejection-verdict {
+  font-weight: 700;
+  font-size: 1rem;
+  animation: rise-in .45s ease .42s both;
+}
+
+.ejection-verdict { color: var(--text); }
+
+.verdict-highlight {
+  color: var(--danger);
+  font-weight: 800;
+  letter-spacing: .01em;
+  text-shadow: 0 0 18px rgba(229, 72, 77, .45);
+}
+
+/* spectator */
+
+.spectator {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 18px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spectator h3 { color: var(--danger); margin: 0; font-size: 1.05rem; text-transform: none; letter-spacing: 0; }
+.spectator p { color: var(--text-dim); font-size: .88rem; }
+
+/* game over */
+
+.gameover-eyebrow {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  animation: rise-in .4s ease both;
+}
+
+.winning-team.reveal-pop { animation: pop-in .7s cubic-bezier(.2, .9, .3, 1.3) both; }
+.player-result.reveal-fade { animation: rise-in .5s ease .35s both; }
+
+.background-overlay.menace {
+  position: relative;
+  background: radial-gradient(680px 420px at 50% 22%, rgba(229, 72, 77, .17) 0%, transparent 72%);
+  border-radius: var(--radius);
+}
+
+.confetti {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.confetti span {
+  position: absolute;
+  top: 0;
+  left: calc((var(--i) * 4.1%) + 2%);
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  background: var(--accent);
+  animation: drift-down 3.4s linear both;
+  animation-delay: calc(var(--i) * 90ms);
+}
+
+.confetti span:nth-child(3n)   { background: var(--success); width: 7px; height: 11px; }
+.confetti span:nth-child(3n+1) { background: var(--warn); }
+.confetti span:nth-child(4n)   { background: #a855f7; }
+.confetti span:nth-child(5n)   { background: var(--danger); }
+.confetti span:nth-child(even) { animation-duration: 4.2s; }
+
+/* Motion off: show the end state, never a blank screen. */
+@media (prefers-reduced-motion: reduce) {
+  .confetti, .countdown-rings { display: none; }
+}
+
+/* ── screen headers ────────────────────────────────────────── */
+
+.screen-header {
+  --header-tone: var(--accent);
+  max-width: 460px;
+  margin: 0 auto 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.screen-header.tone-danger  { --header-tone: var(--danger); }
+.screen-header.tone-success { --header-tone: var(--success); }
+
+.screen-title {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  padding: 24px;
+  gap: 8px;
+  font-size: .95rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--header-tone);
 }
 
-.app-gate-card {
+.screen-icon { font-size: 1.05rem; }
+
+.screen-subtitle,
+.screen-status {
+  font-size: .84rem;
+  color: var(--text-dim);
+}
+
+.screen-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--header-tone);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--header-tone);
+  box-shadow: 0 0 10px -1px var(--header-tone);
+}
+
+.footnote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding-top: 2px;
+  font-size: .78rem;
+  color: var(--text-faint);
   text-align: center;
-  max-width: 320px;
 }
 
-.app-gate-card p {
-  opacity: 0.8;
+/* return-to-round transition reads green, not the blue of a fresh deal */
+.countdown-rings.tone-success span { border-color: var(--success); }
+.countdown-timer.tone-success { color: var(--success); }
+
+/* the verdict types out, so it needs a fixed line and a caret */
+.ejection-verdict {
+  min-height: 1.4em;
+  animation: none;
+}
+
+.ejection-verdict .caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.12em;
+  background: currentColor;
+  animation: caret-blink 1s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ejection-verdict .caret { display: none; }
+}
+
+/* The role banner crossfades between states rather than snapping, so the
+   imposter's reveal cools from red to the same green a crewmate sees. */
+.role-announcement {
+  transition: color 1.6s ease, border-color 1.6s ease, background-color 1.6s ease;
 }

@@ -1,3 +1,4 @@
+import { assignColors } from './playerColor';
 import { isHost } from './host';
 import { MAX_PLAYERS, MIN_PLAYERS } from './constants';
 
@@ -10,6 +11,7 @@ export function deriveLobbyState(gameData, playerName, uid) {
   return {
     players,
     tasks,
+    colors: assignColors(players),
     maxPlayers: MAX_PLAYERS,
     isCreator: isHost(gameData, uid),
     imposterCount: gameData?.imposterCount || 1,
