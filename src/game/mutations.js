@@ -68,11 +68,13 @@ export const startRound = (gameCode, { roles, assignedTasks, imposterHistory, co
     gameStarted: true,
     gameEnded: false,
     meetingCalled: false,
+    roundStartedAt: Date.now(),
     expiresAt: expiry(),
     meetingCaller: deleteField(),
     votingResult: deleteField(),
     resultUntil: deleteField(),
     voteDeadline: deleteField(),
+    ejected: deleteField(),
     winner: deleteField()
   });
 
@@ -84,7 +86,8 @@ export const endRound = (gameCode) => updateGame(gameCode, {
   votes: {},
   voteDeadline: deleteField(),
   votingResult: deleteField(),
-  resultUntil: deleteField()
+  resultUntil: deleteField(),
+  ejected: deleteField()
 });
 
 export const returnToLobby = (gameCode) => updateGame(gameCode, {
@@ -96,6 +99,7 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
+  ejected: deleteField(),
   winner: deleteField()
 });
 
@@ -128,7 +132,8 @@ export const callMeeting = (gameCode, playerName) => updateGame(gameCode, {
   votes: {},
   sabotages: {},
   votingResult: deleteField(),
-  resultUntil: deleteField()
+  resultUntil: deleteField(),
+  ejected: deleteField()
 });
 
 export const submitVote = (gameCode, playerName, vote) =>
@@ -170,6 +175,7 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
       tx.update(gameRef(gameCode), {
         meetingCalled: false,
         votingResult: message,
+        ejected: votedOut || deleteField(),
         resultUntil: Date.now() + RESULT_DISPLAY_MS,
         voteDeadline: deleteField(),
         ...(votedOut ? { killList: nextKillList } : {}),

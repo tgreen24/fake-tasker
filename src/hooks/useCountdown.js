@@ -11,6 +11,15 @@ import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
 const OPENING_COUNTDOWN_SECONDS = 3;
+const REVEAL_HOLD_MS = 3800;
+const INTRO_WINDOW_MS = 10000;
+
+// Only play the opening beat if we actually arrived at it. A refresh ten
+// minutes into a round is not the start of anything. Compared absolutely so a
+// skewed clock fails to "recent is false" rather than replaying forever.
+function justHappened(timestamp, now = Date.now()) {
+  return !!timestamp && Math.abs(now - timestamp) < INTRO_WINDOW_MS;
+}
 const SABOTAGE_COOLDOWN_SECONDS = 120;
 
 function useSecondsRemaining(initial) {
@@ -29,12 +38,44 @@ export function useCountdown(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
 
-  const [countdown] = useSecondsRemaining(OPENING_COUNTDOWN_SECONDS);
+  const [countdown, setCountdown] = useState(null);
   const [killCooldownLeft, setKillCooldownLeft] = useSecondsRemaining(0);
   const [sabotageCooldownLeft, setSabotageCooldownLeft] = useSecondsRemaining(0);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
+  const [blended, setBlended] = useState(false);
 
   const round = useMemo(() => deriveRoundState(gameData, playerName, currentUid()), [gameData, playerName]);
+
+  const introKind = !gameData
+    ? null
+    : round.returningFromMeeting
+      ? (justHappened(round.meetingEndedAt) ? 'return' : null)
+      : (justHappened(round.roundStartedAt) ? 'opening' : null);
+
+  useEffect(() => {
+    if (countdown !== null || !gameData) return;
+    setCountdown(introKind ? OPENING_COUNTDOWN_SECONDS : 0);
+  }, [gameData, introKind, countdown]);
+
+  useEffect(() => {
+    if (countdown === null || countdown <= 0) return undefined;
+    const timer = setTimeout(() => setCountdown((previous) => previous - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const showIntro = !!introKind && (countdown === null || countdown > 0);
+
+  // The role reveal is deliberately loud, then the screen blends back so a
+  // glance from across the room says nothing. Returning from a meeting skips
+  // the reveal entirely -- everyone is stood together at exactly that moment.
+  useEffect(() => {
+    if (round.returningFromMeeting || showIntro) {
+      setBlended(round.returningFromMeeting);
+      return undefined;
+    }
+    const timer = setTimeout(() => setBlended(true), REVEAL_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [round.returningFromMeeting, showIntro]);
 
   const actions = useMemo(() => ({
     toggleTask: async (task) => {
@@ -89,7 +130,16 @@ export function useCountdown(gameCode) {
   ]);
 
   return {
-    state: { ...round, playerName, countdown, killCooldownLeft, sabotageCooldownLeft, sabotageDialogOpen },
+    state: {
+      ...round, playerName,
+      showIntro,
+      introKind,
+      countdown: countdown === null ? OPENING_COUNTDOWN_SECONDS : countdown,
+      killCooldownLeft, sabotageCooldownLeft,
+      sabotageCooldownTotal: SABOTAGE_COOLDOWN_SECONDS,
+      sabotageDialogOpen,
+      blended
+    },
     actions,
     loading,
     connected

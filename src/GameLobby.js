@@ -2,6 +2,8 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useLobby } from './hooks/useLobby';
 import ConnectionBanner from './components/ConnectionBanner';
+import PlayerAvatar from './components/PlayerAvatar';
+import ScreenHeader from './components/ScreenHeader';
 
 function GameLobby() {
   const { gameCode } = useParams();
@@ -14,13 +16,14 @@ function GameLobby() {
   const {
     players, tasks, maxPlayers, playerName, isCreator,
     imposterCount, tasksPerCrewmate, killCooldown,
-    imposterOptions, taskCountOptions,
+    imposterOptions, taskCountOptions, colors,
     newTask, starting, errorMessage
   } = state;
 
   return (
     <div className="game-lobby">
       <ConnectionBanner connected={connected} />
+      <ScreenHeader title="Lobby" />
       <div className="lobby-header">
         <div className="game-code">
           Game Code: <strong>{gameCode}</strong>
@@ -33,9 +36,15 @@ function GameLobby() {
           <div className="player-grid">
             {players.map((player) => (
               <div key={player} className={`player-card ${player === playerName ? 'highlight' : ''}`}>
-                <span>{player}</span>
+                <PlayerAvatar name={player} color={colors[player]} />
+                <span>{player}{player === playerName ? ' (You)' : ''}</span>
                 {isCreator && player !== playerName && (
-                  <button className="kick-button" onClick={() => actions.kickPlayer(player)} title="Remove player">✕</button>
+                  <button
+                    className="kick-button"
+                    onClick={() => actions.kickPlayer(player)}
+                    aria-label={`Remove ${player}`}
+                    title="Remove player"
+                  >✕</button>
                 )}
               </div>
             ))}
@@ -50,9 +59,14 @@ function GameLobby() {
               <h3>Tasks</h3>
               <ul>
                 {tasks.map((task) => (
-                  <li key={task} className="task-item">
-                    {task}
-                    <button className="kick-button" onClick={() => actions.removeTask(task)} title="Remove task">✕</button>
+                  <li key={task} className="task-row">
+                    <span>{task}</span>
+                    <button
+                      className="kick-button"
+                      onClick={() => actions.removeTask(task)}
+                      aria-label={`Remove ${task}`}
+                      title="Remove task"
+                    >✕</button>
                   </li>
                 ))}
               </ul>

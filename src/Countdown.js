@@ -2,6 +2,9 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useCountdown } from './hooks/useCountdown';
 import ConnectionBanner from './components/ConnectionBanner';
+import Selectable from './components/Selectable';
+import TimerBar from './components/TimerBar';
+import ScreenHeader from './components/ScreenHeader';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -12,28 +15,42 @@ function Countdown() {
   }
 
   const {
-    playerName, countdown, role, isCreator, isDead,
+    playerName, countdown, showIntro, introKind, role, isCreator, isDead,
     tasks, completedTasks, tasksBlocked, sabotagingImposter,
     crewmates, killList, fellowImposters, killCooldownLeft,
-    sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates, sabotageCooldownLeft,
-    progress
+    sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates,
+    sabotageCooldownLeft, sabotageCooldownTotal, killCooldown,
+    blended, progress
   } = state;
 
   return (
     <div className="countdown-screen">
       <ConnectionBanner connected={connected} />
       <div className="background-overlay">
-        {countdown > 0 ? (
+        {showIntro ? (
           <div className="countdown">
-            <h1 className="countdown-timer">Game starting in... {countdown}</h1>
+            <div
+              className={`countdown-rings ${introKind === 'return' ? 'tone-success' : ''}`}
+              aria-hidden="true"
+            ><span /><span /><span /></div>
+            <div className="countdown-number" key={countdown}>{countdown}</div>
+            <h1
+              className={`countdown-timer ${introKind === 'return' ? 'tone-success' : ''}`}
+              aria-live="polite"
+            >
+              {introKind === 'return' ? 'Meeting adjourned' : 'Assigning roles…'}
+            </h1>
+            <p className="countdown-caption">
+              {introKind === 'return' ? 'Back to your tasks' : 'Keep your screen to yourself'}
+            </p>
           </div>
         ) : (
           <div className="game-content">
-            <div className="player-info">
-              <h2 className="player-name">{playerName}</h2>
-            </div>
+            <ScreenHeader title={playerName} status="Game in progress" tone="success" />
 
-            <h2 className={`role-announcement ${role || ''}`}>
+            <h2
+              className={`role-announcement role-reveal ${isDead ? role : blended ? 'Crewmate' : role || ''}`}
+            >
               {isDead ? `You are a Dead ${role}` : role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}
             </h2>
 
@@ -43,13 +60,15 @@ function Countdown() {
                 <div className="task-list">
                   <ul>
                     {tasks.map((task) => (
-                      <li
+                      <Selectable
                         key={task}
                         className={`task-item ${completedTasks.includes(task) ? 'selected' : ''}`}
-                        onClick={() => actions.toggleTask(task)}
+                        selected={completedTasks.includes(task)}
+                        label={`${task}${completedTasks.includes(task) ? ', done' : ''}`}
+                        onSelect={() => actions.toggleTask(task)}
                       >
-                        {task}
-                      </li>
+                        <span>{task}</span>
+                      </Selectable>
                     ))}
                   </ul>
                 </div>
@@ -65,21 +84,30 @@ function Countdown() {
 
             {role === 'Imposter' && !isDead && (
               <div>
-                <h3>Kill List</h3>
+                <h3>Targets</h3>
                 <div className="kill-list">
                   <ul>
                     {crewmates.map((crewmate) => (
-                      <li
+                      <Selectable
                         key={crewmate}
                         className={`kill-item ${killList.includes(crewmate) ? 'selected' : ''}`}
-                        onClick={() => actions.toggleKill(crewmate)}
+                        selected={killList.includes(crewmate)}
+                        label={`${crewmate}${killList.includes(crewmate) ? ', dead' : ''}`}
+                        onSelect={() => actions.toggleKill(crewmate)}
                       >
-                        <label>{crewmate}</label>
-                      </li>
+                        <span>{crewmate}</span>
+                      </Selectable>
                     ))}
                   </ul>
                 </div>
-                {killCooldownLeft > 0 && <div className="cooldown-timer">Cooldown: {killCooldownLeft}s</div>}
+                {killCooldownLeft > 0 && (
+                  <TimerBar
+                    label="Kill cooldown"
+                    secondsLeft={killCooldownLeft}
+                    totalSeconds={killCooldown}
+                    tone="warn"
+                  />
+                )}
                 {fellowImposters.length > 0 && (
                   <div className="fellow-imposters">
                     <p>Other Imposters: {fellowImposters.join(', ')}</p>
@@ -103,9 +131,14 @@ function Countdown() {
                       <h3>Select a player to sabotage:</h3>
                       <ul>
                         {eligibleCrewmates.map((crewmate) => (
-                          <li className="kill-item" key={crewmate} onClick={() => actions.sabotage(crewmate)}>
-                            <label className="sabotage-option-btn">{crewmate}</label>
-                          </li>
+                          <Selectable
+                            key={crewmate}
+                            className="kill-item"
+                            label={`Sabotage ${crewmate}`}
+                            onSelect={() => actions.sabotage(crewmate)}
+                          >
+                            <span className="sabotage-option-btn">{crewmate}</span>
+                          </Selectable>
                         ))}
                       </ul>
                       <button className="end-game-btn" onClick={actions.closeSabotageDialog}>Cancel</button>
@@ -113,7 +146,12 @@ function Countdown() {
                   </div>
                 )}
                 {sabotageCooldownLeft > 0 && (
-                  <div className="sabotage-cooldown">Sabotage Cooldown: {sabotageCooldownLeft}s</div>
+                  <TimerBar
+                    label="Sabotage cooldown"
+                    secondsLeft={sabotageCooldownLeft}
+                    totalSeconds={sabotageCooldownTotal}
+                    tone="warn"
+                  />
                 )}
               </div>
             )}

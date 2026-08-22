@@ -25,6 +25,10 @@ export function deriveRoundState(gameData, playerName, uid) {
 
   return {
     role: roles[playerName],
+    // A meeting has already happened this round, so roles are long since dealt.
+    returningFromMeeting: !!gameData?.votingResult,
+    roundStartedAt: gameData?.roundStartedAt,
+    meetingEndedAt: gameData?.resultUntil,
     isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
     killCooldown: gameData?.killCooldown || 30,

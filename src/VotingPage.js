@@ -2,6 +2,11 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useMeeting } from './hooks/useMeeting';
 import ConnectionBanner from './components/ConnectionBanner';
+import PlayerAvatar from './components/PlayerAvatar';
+import Selectable from './components/Selectable';
+import TimerBar from './components/TimerBar';
+import ScreenHeader from './components/ScreenHeader';
+import TypedVerdict from './components/TypedVerdict';
 
 function DeadPlayersList({ deadPlayers }) {
   if (deadPlayers.length === 0) return null;
@@ -28,64 +33,114 @@ function VotingPage() {
 
   const {
     role, isCreator, isAlive, meetingCaller, votingEnded, displayedResult,
-    myVote, votesCast, alivePlayers, deadPlayers, secondsLeft,
-    selectedVote, selectedKillPlayer, killDialogOpen, killTargets
+    myVote, votesCast, alivePlayers, ballot, deadPlayers, secondsLeft,
+    selectedVote, selectedKillPlayer, killDialogOpen, killTargets,
+    colors, voteTotalSeconds, ejected, ejectedWasImposter,
+    displayedVerdict, verdictText, verdictComplete
   } = state;
 
   const waitingLine = `${votesCast}/${alivePlayers.length} voted`;
-  const timerLine = secondsLeft !== null ? ` · vote ends in ${secondsLeft}s` : '';
+  const voteTimer = secondsLeft !== null && (
+    <TimerBar label="Vote ends in" secondsLeft={secondsLeft} totalSeconds={voteTotalSeconds} />
+  );
 
   return (
     <div className="voting-page">
       <ConnectionBanner connected={connected} />
       <div className="voting-card-container">
-        <h2>Emergency Meeting called by {meetingCaller}</h2>
+        <ScreenHeader
+          title="Emergency Meeting"
+          subtitle={meetingCaller ? `Called by ${meetingCaller}` : null}
+          tone="danger"
+          icon="🚨"
+        />
+        {!votingEnded && !myVote && isAlive && voteTimer}
 
         {votingEnded ? (
-          <div className="voting-result">
-            <h3>{displayedResult}</h3>
+          <div className="voting-result" aria-live="polite">
+            {ejected ? (
+              <div className="ejection">
+                <div className="ejection-avatar">
+                  <PlayerAvatar name={ejected} color={colors[ejected]} />
+                </div>
+                <h3 className="ejection-name">{ejected} was ejected</h3>
+                <p className="ejection-verdict">
+                  <TypedVerdict
+                    text={verdictText}
+                    revealed={displayedVerdict.length}
+                    highlightWord="Imposter"
+                    highlight={ejectedWasImposter}
+                  />
+                  {!verdictComplete && <span className="caret" aria-hidden="true" />}
+                </p>
+              </div>
+            ) : (
+              <h3>{displayedResult}</h3>
+            )}
           </div>
+        ) : !isAlive ? (
+          <>
+            {voteTimer}
+            <div className="spectator">
+              <h3>You are dead</h3>
+              <p>Watch the vote play out. You cannot vote, and nobody can vote for you.</p>
+            </div>
+            <p className="vote-progress">{waitingLine}</p>
+            <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
+            <DeadPlayersList deadPlayers={deadPlayers} />
+          </>
         ) : myVote ? (
           <>
             <p>{myVote === 'skip' ? 'You skipped voting.' : `You voted for: ${myVote}`}</p>
-            <p className="vote-progress">Waiting for other players… ({waitingLine}{timerLine})</p>
+            {voteTimer}
+            <p className="vote-progress">Waiting for other players… ({waitingLine})</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
             <DeadPlayersList deadPlayers={deadPlayers} />
           </>
         ) : (
           <>
             <div className="voting-grid">
-              {alivePlayers.map((player) => (
-                <div
+              {ballot.map((player) => (
+                <Selectable
+                  as="div"
                   key={player}
                   className={`voting-card ${selectedVote === player ? 'selected' : ''}`}
-                  onClick={() => actions.selectVote(player)}
+                  selected={selectedVote === player}
+                  label={`Vote for ${player}`}
+                  onSelect={() => actions.selectVote(player)}
                 >
+                  <PlayerAvatar name={player} color={colors[player]} hollow />
                   <span>{player}</span>
-                </div>
+                </Selectable>
               ))}
             </div>
 
-            <div
+            <Selectable
+              as="div"
               className={`voting-card ${selectedVote === 'skip' ? 'selected' : ''}`}
-              onClick={() => actions.selectVote('skip')}
+              selected={selectedVote === 'skip'}
+              label="Skip the vote"
+              onSelect={() => actions.selectVote('skip')}
             >
               <span>Skip Vote</span>
-            </div>
+            </Selectable>
 
-            {role === 'Imposter' && isAlive && (
-              <label className="voting-card" onClick={actions.openKillDialog}>
+            {role === 'Imposter' && (
+              <Selectable
+                as="div"
+                className="voting-card"
+                label="Kill a crewmate"
+                onSelect={actions.openKillDialog}
+              >
                 <span>Kill Crewmate</span>
-              </label>
+              </Selectable>
             )}
 
-            {isAlive && (
-              <button className="submit-vote-button" onClick={actions.submitVote} disabled={!selectedVote}>
-                Submit Vote
-              </button>
-            )}
+            <button className="submit-vote-button" onClick={actions.submitVote} disabled={!selectedVote}>
+              Submit Vote
+            </button>
 
-            <p className="vote-progress">{waitingLine}{timerLine}</p>
+            <p className="vote-progress">{waitingLine}</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
             <DeadPlayersList deadPlayers={deadPlayers} />
 
@@ -95,13 +150,15 @@ function VotingPage() {
                   <h3>Select a player to mark as killed:</h3>
                   <ul>
                     {killTargets.map((player) => (
-                      <li
+                      <Selectable
                         key={player}
-                        onClick={() => actions.selectKillTarget(player)}
                         className={`kill-item ${selectedKillPlayer === player ? 'selected' : ''}`}
+                        selected={selectedKillPlayer === player}
+                        label={`Mark ${player} as killed`}
+                        onSelect={() => actions.selectKillTarget(player)}
                       >
-                        <label>{player}</label>
-                      </li>
+                        <span>{player}</span>
+                      </Selectable>
                     ))}
                   </ul>
                   <button className="end-game-btn" onClick={actions.confirmKill} disabled={!selectedKillPlayer}>
@@ -112,6 +169,11 @@ function VotingPage() {
               </div>
             )}
           </>
+        )}
+        {!votingEnded && (
+          <p className="footnote">
+            <span aria-hidden="true">ⓘ</span> You get one vote, and it is final once submitted.
+          </p>
         )}
       </div>
     </div>

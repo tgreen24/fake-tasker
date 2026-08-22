@@ -16,17 +16,23 @@ function GameOver() {
   return (
     <div className="gameover-screen">
       <ConnectionBanner connected={connected} />
-      <div className="background-overlay">
+      <div className={`background-overlay ${winner === 'Imposters' ? 'menace' : ''}`}>
+        {winner === 'Crewmates' && (
+          <div className="confetti" aria-hidden="true">
+            {Array.from({ length: 24 }).map((_, i) => <span key={i} style={{ '--i': i }} />)}
+          </div>
+        )}
         <div className="gameover-content">
           <div className="player-name">
             <h2>{playerName}</h2>
           </div>
 
-          <h1 className={`winning-team ${winner === 'Imposters' ? 'imposters-win' : 'crewmates-win'}`}>
+          <p className="gameover-eyebrow">Game Over</p>
+          <h1 className={`winning-team reveal-pop ${winner === 'Imposters' ? 'imposters-win' : 'crewmates-win'}`}>
             {winner} Win
           </h1>
 
-          <h2 className="player-result">{role ? (playerWon ? 'You Win!' : 'You Lose!') : ''}</h2>
+          <h2 className="player-result reveal-fade">{role ? (playerWon ? 'You Win!' : 'You Lose!') : ''}</h2>
 
           {errorMessage && <p className="error-message">{errorMessage}</p>}
 

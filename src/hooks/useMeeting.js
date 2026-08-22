@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { closeMeeting, markKilledDuringMeeting, submitVote as writeVote } from '../game/mutations';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
-import { shouldResolveMeeting } from '../voteLogic';
+import { VOTE_DURATION_MS, shouldResolveMeeting } from '../voteLogic';
 import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
 const TYPEWRITER_MS = 40;
+const VERDICT_DELAY_MS = 700;
 
-function useTypewriter(text) {
+function useTypewriter(text, delayMs = 0) {
   const [shown, setShown] = useState('');
 
   useEffect(() => {
@@ -17,14 +18,21 @@ function useTypewriter(text) {
       return undefined;
     }
     setShown('');
-    let index = 0;
-    const timer = setInterval(() => {
-      index += 1;
-      setShown(text.slice(0, index));
-      if (index >= text.length) clearInterval(timer);
-    }, TYPEWRITER_MS);
-    return () => clearInterval(timer);
-  }, [text]);
+    let timer = null;
+    const start = setTimeout(() => {
+      let index = 0;
+      timer = setInterval(() => {
+        index += 1;
+        setShown(text.slice(0, index));
+        if (index >= text.length) clearInterval(timer);
+      }, TYPEWRITER_MS);
+    }, delayMs);
+
+    return () => {
+      clearTimeout(start);
+      if (timer) clearInterval(timer);
+    };
+  }, [text, delayMs]);
 
   return shown;
 }
@@ -40,6 +48,10 @@ export function useMeeting(gameCode) {
 
   const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid()), [gameData, playerName]);
   const displayedResult = useTypewriter(meeting.votingResult);
+  const verdictText = meeting.ejected
+    ? (meeting.ejectedWasImposter ? 'They were the Imposter' : 'They were not the Imposter')
+    : '';
+  const displayedVerdict = useTypewriter(verdictText, VERDICT_DELAY_MS);
 
   const { meetingCalled, voteDeadline, isCreator, players } = meeting;
   const myTurnDelay = resolverDelayMs(players, playerName, isCreator);
@@ -100,7 +112,11 @@ export function useMeeting(gameCode) {
       selectedKillPlayer,
       killDialogOpen,
       secondsLeft,
+      voteTotalSeconds: VOTE_DURATION_MS / 1000,
       displayedResult,
+      displayedVerdict,
+      verdictText,
+      verdictComplete: !!verdictText && displayedVerdict.length >= verdictText.length,
       killTargets: meeting.killableBy(playerName)
     },
     actions,
