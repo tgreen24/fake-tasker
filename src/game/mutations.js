@@ -7,8 +7,9 @@ import { updateGame } from '../db';
 import { RESULT_DISPLAY_MS } from '../gameRoute';
 import { VOTE_DURATION_MS, decideOutcome, resolveVote, shouldResolveMeeting } from '../voteLogic';
 
-export const GAME_LIFETIME_MS = 24 * 60 * 60 * 1000;
-export const MAX_PLAYERS = 25;
+import { GAME_LIFETIME_MS, MAX_PLAYERS } from './constants';
+
+export { GAME_LIFETIME_MS, MAX_PLAYERS };
 
 const gameRef = (gameCode) => doc(db, 'games', gameCode);
 const expiry = () => Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS);
