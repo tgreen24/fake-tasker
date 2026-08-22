@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import {
-  browserSessionPersistence,
+  browserLocalPersistence,
   getAuth,
   onAuthStateChanged,
   setPersistence,
@@ -39,11 +39,15 @@ const auth = getAuth(app);
 
 let signInPromise = null;
 
-// Session-scoped so each browser tab is its own player, matching how player
-// identity is stored. Every Firestore call must wait on this.
+// Deliberately local, not session-scoped. Host powers are pinned to the uid
+// that created the game, and a session-scoped account dies with the tab --
+// so a host who closed their tab came back as a new uid and permanently lost
+// the ability to start, end, or delete their own game. Local persistence
+// survives that. Which player you are is still per-tab; that lives in
+// sessionStorage, so two tabs share an account but remain separate players.
 export function ensureSignedIn() {
   if (!signInPromise) {
-    signInPromise = setPersistence(auth, browserSessionPersistence)
+    signInPromise = setPersistence(auth, browserLocalPersistence)
       .then(() => new Promise((resolve, reject) => {
         const unsubscribe = onAuthStateChanged(
           auth,
