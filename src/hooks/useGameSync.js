@@ -6,6 +6,14 @@ import { routeForState } from '../gameRoute';
 
 const ROUTE_TICK_MS = 1000;
 const MAX_BACKOFF_MS = 15000;
+const OFFLINE_GRACE_MS = 3000;
+
+// A dropped listener calls the error handler and gets rebuilt. A *stalled* one
+// never does: the stream goes quiet, no error arrives, and the client sits on
+// stale data believing it is connected. iOS Safari does this after suspending a
+// tab. So we also watch how long it has been since a snapshot landed.
+const STALE_RESYNC_MS = 30000;
+const STALE_REBUILD_MS = 60000;
 
 export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
   const navigate = useNavigate();
@@ -34,19 +42,42 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     let cancelled = false;
     let unsubscribe = null;
     let retryTimer = null;
+    let offlineTimer = null;
     let backoff = 1000;
+    let lastSnapshotAt = Date.now();
 
     const gameRef = doc(db, 'games', gameCode);
 
     const markConnected = (value) => {
+      if (offlineTimer) {
+        clearTimeout(offlineTimer);
+        offlineTimer = null;
+      }
       connectedRef.current = value;
       setConnected(value);
+    };
+
+    // A local pending write also reads as fromCache, so treating that as
+    // offline would flash the banner on every tap. Only sustained staleness
+    // counts as a dropped connection.
+    const noteFreshness = (fromCache) => {
+      if (!fromCache) {
+        markConnected(true);
+        return;
+      }
+      if (offlineTimer || !connectedRef.current) return;
+      offlineTimer = setTimeout(() => {
+        offlineTimer = null;
+        connectedRef.current = false;
+        setConnected(false);
+      }, OFFLINE_GRACE_MS);
     };
 
     const receive = (snapshot) => {
       if (cancelled) return;
       backoff = 1000;
-      markConnected(!snapshot.metadata.fromCache);
+      lastSnapshotAt = Date.now();
+      noteFreshness(snapshot.metadata.fromCache);
 
       if (!snapshot.exists()) {
         dataRef.current = null;
@@ -63,7 +94,6 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       routeRef.current(data);
     };
 
-    // A dropped listener is never retried by the SDK, so rebuild it ourselves.
     const fail = (error) => {
       if (cancelled) return;
       console.error('[useGameSync] snapshot listener dropped', error);
@@ -76,6 +106,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
 
     function subscribe() {
       if (cancelled) return;
+      lastSnapshotAt = Date.now();
       unsubscribe = onSnapshot(gameRef, receive, fail);
     }
 
@@ -87,8 +118,16 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         if (cancelled) return;
         console.warn('[useGameSync] forced resync failed', error);
         markConnected(false);
-        if (dataRef.current) routeRef.current(dataRef.current);
       }
+    };
+
+    const rebuild = () => {
+      if (cancelled) return;
+      console.warn('[useGameSync] listener went quiet, rebuilding it');
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      subscribe();
+      resync();
     };
 
     // pageshow covers iOS Safari bfcache restores, which skip visibilitychange.
@@ -101,7 +140,10 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     const tick = () => {
       if (document.hidden) return;
       if (dataRef.current) routeRef.current(dataRef.current);
-      if (!connectedRef.current) resync();
+
+      const quietFor = Date.now() - lastSnapshotAt;
+      if (quietFor > STALE_REBUILD_MS) rebuild();
+      else if (quietFor > STALE_RESYNC_MS || !connectedRef.current) resync();
     };
 
     subscribe();
@@ -115,6 +157,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       cancelled = true;
       if (unsubscribe) unsubscribe();
       if (retryTimer) clearTimeout(retryTimer);
+      if (offlineTimer) clearTimeout(offlineTimer);
       clearInterval(tickTimer);
       document.removeEventListener('visibilitychange', onForeground);
       window.removeEventListener('pageshow', onForeground);

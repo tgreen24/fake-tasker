@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore } from "firebase/firestore";
 import {
   browserLocalPersistence,
   getAuth,
@@ -34,7 +34,11 @@ if (appCheckSiteKey) {
   });
 }
 
-const db = getFirestore(app);
+// Firestore's default WebChannel transport is known to stall behind some
+// proxies and on iOS Safari -- the stream goes quiet without erroring, so the
+// client keeps stale data. Auto-detect falls back to long polling when the
+// environment looks like one of those.
+const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 const auth = getAuth(app);
 
 let signInPromise = null;
