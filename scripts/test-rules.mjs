@@ -1,15 +1,13 @@
 import { readFileSync } from 'node:fs';
-import {
-  initializeTestEnvironment,
-  assertSucceeds,
-  assertFails
-} from '@firebase/rules-unit-testing';
+import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs,
-  arrayUnion, deleteField
+  arrayUnion, arrayRemove, deleteField
 } from 'firebase/firestore';
 
 const CODE = 'AB12CD';
+const HOST = 'uid-host';
+const PLAYER = 'uid-player';
 const results = [];
 
 const check = async (label, promise) => {
@@ -28,85 +26,116 @@ const testEnv = await initializeTestEnvironment({
   firestore: { rules: readFileSync('firestore.rules', 'utf8'), host: '127.0.0.1', port: 8080 }
 });
 
-const seed = async (data) => {
+const baseGame = {
+  players: ['tyler', 'sam'],
+  creator: 'tyler',
+  creatorUid: HOST,
+  tasks: ['Dishes'],
+  roles: { tyler: 'Imposter', sam: 'Crewmate' },
+  gameStarted: true,
+  gameEnded: false,
+  meetingCalled: false
+};
+
+const seed = async (data = baseGame) => {
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), 'games', CODE), data);
   });
 };
 
-const baseGame = {
-  players: ['tyler'],
-  creator: 'tyler',
-  tasks: [],
-  gameStarted: false,
-  gameEnded: false,
-  meetingCalled: false
-};
-
 const anon = testEnv.unauthenticatedContext().firestore();
-const alice = testEnv.authenticatedContext('uid-alice').firestore();
-const bob = testEnv.authenticatedContext('uid-bob').firestore();
+const host = testEnv.authenticatedContext(HOST).firestore();
+const player = testEnv.authenticatedContext(PLAYER).firestore();
 
-// ── the exposure I demonstrated against the live database ──
-await seed({ ...baseGame, roles: { tyler: 'Imposter' } });
-
+// ── unauthenticated access, the original exposure ──
+await seed();
 await check('signed-out read is denied', assertFails(getDoc(doc(anon, 'games', CODE))));
 await check('signed-out write is denied',
-  assertFails(updateDoc(doc(anon, 'games', CODE), { players: arrayUnion('intruder') })));
-await check('signed-out create is denied',
-  assertFails(setDoc(doc(anon, 'games', 'ZZZZZZ'), baseGame)));
+  assertFails(updateDoc(doc(anon, 'games', CODE), { players: arrayUnion('x') })));
 await check('signed-out delete is denied', assertFails(deleteDoc(doc(anon, 'games', CODE))));
-await check('collection enumeration is denied even when signed in',
-  assertFails(getDocs(collection(alice, 'games'))));
+await check('enumeration is denied even when signed in',
+  assertFails(getDocs(collection(player, 'games'))));
 await check('other collections are denied outright',
-  assertFails(getDoc(doc(alice, 'secrets', 'anything'))));
+  assertFails(getDoc(doc(player, 'secrets', 'x'))));
 
-// ── what the app legitimately does ──
-await check('signed-in player can fetch a game by code', assertSucceeds(getDoc(doc(alice, 'games', CODE))));
-await check('joining a game is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { players: arrayUnion('sam') })));
-await check('adding a task is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { tasks: arrayUnion('Do the dishes') })));
-await check('casting a vote is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { 'votes.sam': 'tyler' })));
-await check('completing a task is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { 'completedTasks.sam': ['Do the dishes'] })));
-await check('recording a kill is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { killList: arrayUnion('sam') })));
-await check('clearing a field is allowed',
-  assertSucceeds(updateDoc(doc(alice, 'games', CODE), { meetingCaller: deleteField() })));
-await check('starting a round is allowed', assertSucceeds(updateDoc(doc(alice, 'games', CODE), {
-  roles: { tyler: 'Imposter', sam: 'Crewmate' },
-  assignedTasks: { sam: ['Do the dishes'] },
-  gameStarted: true,
-  gameEnded: false
-})));
-await check('host can delete the game', assertSucceeds(deleteDoc(doc(alice, 'games', CODE))));
+// ── ordinary play, by a non-host player ──
+await check('a player can fetch the game by code', assertSucceeds(getDoc(doc(player, 'games', CODE))));
+await check('a player can join', assertSucceeds(updateDoc(doc(player, 'games', CODE), { players: arrayUnion('kai') })));
+await check('a player can cast their vote',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), { 'votes.sam': 'tyler' })));
+await check('a player can complete a task',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), { 'completedTasks.sam': ['Dishes'] })));
+await check('a player can record a kill',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), { killList: arrayUnion('sam') })));
+await check('a player can call an emergency meeting',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), {
+    meetingCalled: true, meetingCaller: 'sam', voteDeadline: 123, votes: {}, sabotages: {}
+  })));
+await check('any player can close a meeting (the deadlock fix)',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), {
+    meetingCalled: false, votingResult: 'skipped', resultUntil: 456, voteDeadline: deleteField()
+  })));
+await check('a player can end the game when they detect a win',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), { gameEnded: true, winner: 'Crewmates' })));
+await check('a player can sabotage',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), { 'sabotages.tyler': { sabotagedPlayer: 'sam' } })));
+
+// ── what a non-host player must NOT be able to do ──
+await seed();
+await check('a player cannot reassign roles',
+  assertFails(updateDoc(doc(player, 'games', CODE), { roles: { tyler: 'Crewmate', sam: 'Imposter' } })));
+await check('a player cannot rewrite task assignments',
+  assertFails(updateDoc(doc(player, 'games', CODE), { assignedTasks: { sam: [] } })));
+await check('a player cannot start or stop a round',
+  assertFails(updateDoc(doc(player, 'games', CODE), { gameStarted: false })));
+await check('a player cannot edit the task list',
+  assertFails(updateDoc(doc(player, 'games', CODE), { tasks: arrayUnion('rigged') })));
+await check('a player cannot change game settings',
+  assertFails(updateDoc(doc(player, 'games', CODE), { imposterCount: 5 })));
+await check('a player cannot kick anyone',
+  assertFails(updateDoc(doc(player, 'games', CODE), { players: arrayRemove('sam') })));
+await check('a player cannot delete the game', assertFails(deleteDoc(doc(player, 'games', CODE))));
+await check('a player cannot seize the host slot',
+  assertFails(updateDoc(doc(player, 'games', CODE), { creatorUid: PLAYER })));
+await check('a player cannot rename the host',
+  assertFails(updateDoc(doc(player, 'games', CODE), { creator: 'sam' })));
+
+// ── the host can do all of it ──
+await check('the host can assign roles',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { roles: { tyler: 'Crewmate', sam: 'Imposter' } })));
+await check('the host can start a round',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { gameStarted: true, assignedTasks: { sam: ['Dishes'] } })));
+await check('the host can edit the task list',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { tasks: arrayUnion('Sweep') })));
+await check('the host can change settings',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { imposterCount: 2 })));
+await check('the host can kick a player',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { players: arrayRemove('sam') })));
+await check('the host can delete the game', assertSucceeds(deleteDoc(doc(host, 'games', CODE))));
 
 // ── creation shape ──
-await check('valid game creation is allowed',
-  assertSucceeds(setDoc(doc(alice, 'games', 'QQ11WW'), baseGame)));
+await check('valid creation is allowed', assertSucceeds(setDoc(doc(host, 'games', 'QQ11WW'), {
+  players: ['tyler'], creator: 'tyler', creatorUid: HOST, tasks: []
+})));
+await check('creating a game under someone else uid is denied',
+  assertFails(setDoc(doc(host, 'games', 'RR22TT'), {
+    players: ['tyler'], creator: 'tyler', creatorUid: PLAYER, tasks: []
+  })));
+await check('creating without a creatorUid is denied',
+  assertFails(setDoc(doc(host, 'games', 'TT44YY'), { players: ['tyler'], creator: 'tyler', tasks: [] })));
 await check('a game code of the wrong length is denied',
-  assertFails(setDoc(doc(alice, 'games', 'SHORT'), baseGame)));
-await check('creating a game you are not the host of is denied',
-  assertFails(setDoc(doc(alice, 'games', 'RR22TT'), { ...baseGame, creator: 'someone-else' })));
-await check('creating a pre-populated lobby is denied',
-  assertFails(setDoc(doc(alice, 'games', 'YY33UU'), { ...baseGame, players: ['tyler', 'sam'] })));
+  assertFails(setDoc(doc(host, 'games', 'SHORT'), {
+    players: ['tyler'], creator: 'tyler', creatorUid: HOST, tasks: []
+  })));
 
-// ── host cannot be hijacked, document cannot be inflated ──
-await seed(baseGame);
-await check('reassigning the host is denied',
-  assertFails(updateDoc(doc(bob, 'games', CODE), { creator: 'bob' })));
-await check('exceeding the player cap is denied',
-  assertFails(updateDoc(doc(bob, 'games', CODE), {
-    players: Array.from({ length: 26 }, (_, i) => `p${i}`)
-  })));
-await check('exceeding the task cap is denied',
-  assertFails(updateDoc(doc(bob, 'games', CODE), {
-    tasks: Array.from({ length: 61 }, (_, i) => `t${i}`)
-  })));
-await check('removing the players field is denied',
-  assertFails(updateDoc(doc(bob, 'games', CODE), { players: deleteField() })));
+// ── document cannot be inflated ──
+await seed();
+await check('exceeding the player cap is denied', assertFails(updateDoc(doc(host, 'games', CODE), {
+  players: Array.from({ length: 26 }, (_, i) => `p${i}`)
+})));
+await check('exceeding the task cap is denied', assertFails(updateDoc(doc(host, 'games', CODE), {
+  tasks: Array.from({ length: 61 }, (_, i) => `t${i}`)
+})));
 
 await testEnv.cleanup();
 

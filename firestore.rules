@@ -1,9 +1,12 @@
 rules_version = '2';
 
-// Phase 1: require an identity, forbid enumeration, bound the document.
-// Writes are still not attributed to a player -- roles, votes and kills are
-// keyed by display name, so any signed-in player can still write any field.
-// Closing that requires re-keying on uid (phase 3).
+// Requires an identity, forbids enumeration, bounds the document, and pins
+// host-only state to the uid that created the game.
+//
+// Still open by design: roles live in this shared document, so every player
+// receives the imposter list. Votes, kills and task completion are keyed by
+// display name, so a player can still write another player's entry. Closing
+// those requires re-keying on uid and moving secrets to per-player documents.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -20,6 +23,32 @@ service cloud.firestore {
         && (!('killList' in data.keys()) || (data.killList is list && data.killList.size() <= 25));
     }
 
+    // Only the account that created the game is the host. `creator` is a
+    // display name and proves nothing.
+    function isHost() {
+      return request.auth.uid == resource.data.get('creatorUid', '');
+    }
+
+    // Fields only the host ever writes. Everything absent from this list is
+    // written by ordinary play: votes, kills, task completion, meetings, and
+    // the game-over flags any client may set when it detects a win.
+    function hostOnlyFields() {
+      return [
+        'roles', 'assignedTasks', 'imposterHistory',
+        'imposterCount', 'tasksPerCrewmate', 'killCooldown',
+        'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid'
+      ];
+    }
+
+    function touchesHostOnlyFields() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(hostOnlyFields());
+    }
+
+    // Joining grows the roster; only the host may remove a player.
+    function removesPlayers() {
+      return request.resource.data.players.size() < resource.data.players.size();
+    }
+
     match /games/{gameCode} {
       // A player needs to fetch a game by code to join it, but nobody may
       // list the collection and harvest every live game's roles.
@@ -30,17 +59,17 @@ service cloud.firestore {
         && gameCode.size() == 6
         && boundedGame(request.resource.data)
         && request.resource.data.players.size() == 1
-        && request.resource.data.creator == request.resource.data.players[0];
+        && request.resource.data.creator == request.resource.data.players[0]
+        && request.resource.data.creatorUid == request.auth.uid;
 
-      // The host cannot be swapped out from under the room. The resource
-      // guard keeps this returning false rather than erroring when there is
-      // no existing document to compare against.
       allow update: if signedIn()
         && resource != null
         && boundedGame(request.resource.data)
-        && request.resource.data.creator == resource.data.creator;
+        && request.resource.data.creator == resource.data.creator
+        && request.resource.data.get('creatorUid', '') == resource.data.get('creatorUid', '')
+        && (isHost() || (!touchesHostOnlyFields() && !removesPlayers()));
 
-      allow delete: if signedIn();
+      allow delete: if signedIn() && isHost();
     }
 
     match /{document=**} {

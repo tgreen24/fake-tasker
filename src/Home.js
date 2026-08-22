@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { auth, db } from './firebase';
 import { saveSession } from './session';
 
 const CODE_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -52,6 +52,7 @@ function Home() {
       await setDoc(doc(db, 'games', gameCode), {
         players: [name],
         creator: name,
+        creatorUid: auth.currentUser?.uid || null,
         tasks: [],
         gameStarted: false,
         gameEnded: false,
