@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import { createGame } from './game/mutations';
 import { saveSession } from './session';
 
 const CODE_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const CODE_LENGTH = 6;
 const CODE_ATTEMPTS = 5;
-const GAME_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 function generateGameCode() {
   let code = '';
@@ -49,21 +49,7 @@ function Home() {
         return;
       }
 
-      await setDoc(doc(db, 'games', gameCode), {
-        players: [name],
-        creator: name,
-        creatorUid: auth.currentUser?.uid || null,
-        tasks: [],
-        gameStarted: false,
-        gameEnded: false,
-        meetingCalled: false,
-        imposterHistory: {},
-        imposterCount: 1,
-        tasksPerCrewmate: 3,
-        killCooldown: 30,
-        createdAt: serverTimestamp(),
-        expiresAt: Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS)
-      });
+      await createGame(gameCode, name);
 
       saveSession(gameCode, name);
       navigate(`/lobby/${gameCode}`, { state: { playerName: name } });

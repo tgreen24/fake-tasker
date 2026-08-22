@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { arrayRemove, arrayUnion, deleteField } from 'firebase/firestore';
-import { updateGame } from './db';
-import { VOTE_DURATION_MS } from './voteLogic';
+import {
+  callMeeting, clearSabotage, endGame, endRound,
+  recordKill, setCompletedTasks, startSabotage, undoKill
+} from './game/mutations';
 import { usePlayerName } from './hooks/usePlayerName';
 import { useGameSync } from './hooks/useGameSync';
 import ConnectionBanner from './components/ConnectionBanner';
@@ -90,21 +91,21 @@ function Countdown() {
     ).length;
 
     if (aliveImposters > 0 && aliveImposters >= aliveCrewmates) {
-      await updateGame(gameCode, { gameEnded: true, winner: 'Imposters' });
+      await endGame(gameCode, 'Imposters');
     }
   };
 
   const toggleCrewmateDeath = async (crewmate) => {
     if (killList.includes(crewmate)) {
       setCooldownTimer(0);
-      await updateGame(gameCode, { killList: arrayRemove(crewmate) });
+      await undoKill(gameCode, crewmate);
       return;
     }
 
     if (cooldownTimer > 0) return;
 
     setCooldownTimer(killCooldown);
-    const ok = await updateGame(gameCode, { killList: arrayUnion(crewmate) });
+    const ok = await recordKill(gameCode, crewmate);
     if (!ok) {
       setCooldownTimer(0);
       return;
@@ -119,7 +120,7 @@ function Countdown() {
       ? completedTasks.filter((t) => t !== task)
       : [...completedTasks, task];
 
-    const ok = await updateGame(gameCode, { [`completedTasks.${playerName}`]: nextCompleted });
+    const ok = await setCompletedTasks(gameCode, playerName, nextCompleted);
     if (!ok) return;
 
     const allTasksDone = crewmates.length > 0 && crewmates.every((crewmate) => {
@@ -129,41 +130,24 @@ function Countdown() {
     });
 
     if (allTasksDone) {
-      await updateGame(gameCode, { gameEnded: true, winner: 'Crewmates' });
+      await endGame(gameCode, 'Crewmates');
     }
   };
 
-  const callEmergencyMeeting = () => updateGame(gameCode, {
-    meetingCalled: true,
-    meetingCaller: playerName,
-    voteDeadline: Date.now() + VOTE_DURATION_MS,
-    votes: {},
-    sabotages: {},
-    votingResult: deleteField(),
-    resultUntil: deleteField()
-  });
+  const callEmergencyMeeting = () => callMeeting(gameCode, playerName);
 
   const initiateFindMeSabotage = async (crewmate) => {
     if (sabotageCooldown > 0) return;
     setIsSabotageDialogOpen(false);
-    await updateGame(gameCode, { [`sabotages.${playerName}`]: { sabotagedPlayer: crewmate } });
+    await startSabotage(gameCode, playerName, crewmate);
   };
 
   const handleSabotageReset = async () => {
     setSabotageCooldown(SABOTAGE_COOLDOWN_SECONDS);
-    await updateGame(gameCode, { [`sabotages.${playerName}`]: deleteField() });
+    await clearSabotage(gameCode, playerName);
   };
 
-  const endGameRound = () => updateGame(gameCode, {
-    gameStarted: false,
-    gameEnded: false,
-    meetingCalled: false,
-    sabotages: {},
-    votes: {},
-    voteDeadline: deleteField(),
-    votingResult: deleteField(),
-    resultUntil: deleteField()
-  });
+  const endGameRound = () => endRound(gameCode);
 
   if (loading) {
     return <div className="countdown-screen"><ConnectionBanner connected={connected} />Loading…</div>;

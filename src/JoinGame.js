@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { MAX_PLAYERS, joinGame } from './game/mutations';
 import { saveSession } from './session';
-
-const MAX_PLAYERS = 25;
 
 function JoinGame() {
   const [gameCode, setGameCode] = useState('');
@@ -62,7 +61,7 @@ function JoinGame() {
         return;
       }
 
-      await updateDoc(gameRef, { players: arrayUnion(playerName) });
+      await joinGame(code, playerName);
 
       saveSession(code, playerName);
       navigate(`/lobby/${code}`, { state: { playerName } });

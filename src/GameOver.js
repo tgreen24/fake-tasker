@@ -1,7 +1,6 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
-import { deleteField } from 'firebase/firestore';
-import { updateGame } from './db';
+import { returnToLobby } from './game/mutations';
 import { usePlayerName } from './hooks/usePlayerName';
 import { useGameSync } from './hooks/useGameSync';
 import ConnectionBanner from './components/ConnectionBanner';
@@ -34,17 +33,7 @@ function GameOver() {
   const role = gameData?.roles?.[playerName];
   const playerWon = (winner === 'Crewmates' && role === 'Crewmate') || (winner === 'Imposters' && role === 'Imposter');
 
-  const endGameAndReturnToLobby = () => updateGame(gameCode, {
-    gameStarted: false,
-    gameEnded: false,
-    meetingCalled: false,
-    voteDeadline: deleteField(),
-    votes: {},
-    sabotages: {},
-    votingResult: deleteField(),
-    resultUntil: deleteField(),
-    winner: deleteField()
-  });
+  const endGameAndReturnToLobby = () => returnToLobby(gameCode);
 
   if (loading) {
     return <div className="gameover-screen"><ConnectionBanner connected={connected} />Loading…</div>;

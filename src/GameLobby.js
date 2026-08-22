@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, deleteDoc, updateDoc, arrayRemove, arrayUnion, deleteField, Timestamp } from 'firebase/firestore';
-import { db } from './firebase';
-import { updateGame } from './db';
+import {
+  MAX_PLAYERS, addTask as writeTask, deleteGame,
+  kickPlayer as writeKick, removeTask as writeRemoveTask,
+  startRound, updateSetting as writeSetting
+} from './game/mutations';
 import { usePlayerName } from './hooks/usePlayerName';
 import { useGameSync } from './hooks/useGameSync';
 import ConnectionBanner from './components/ConnectionBanner';
-
-const MAX_PLAYERS = 25;
-const GAME_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 function shuffleArray(array) {
   const result = [...array];
@@ -93,14 +92,14 @@ function GameLobby() {
     }
     setNewTask('');
     setErrorMessage('');
-    await updateDoc(doc(db, 'games', gameCode), { tasks: arrayUnion(task) }).catch((error) => {
+    await writeTask(gameCode, task).catch((error) => {
       console.error('Error adding task:', error);
       setErrorMessage('Could not add that task. Try again.');
     });
   };
 
   const removeTask = async (task) => {
-    await updateDoc(doc(db, 'games', gameCode), { tasks: arrayRemove(task) }).catch((error) => {
+    await writeRemoveTask(gameCode, task).catch((error) => {
       console.error('Error removing task:', error);
     });
   };
@@ -144,23 +143,11 @@ function GameLobby() {
       completedTasks[player] = [];
     });
 
-    const ok = await updateGame(gameCode, {
+    const ok = await startRound(gameCode, {
       roles,
       assignedTasks: assignTasksEvenly(crewmates, tasks, tasksPerCrewmate),
       imposterHistory: nextHistory,
-      completedTasks,
-      killList: [],
-      votes: {},
-      sabotages: {},
-      gameStarted: true,
-      gameEnded: false,
-      expiresAt: Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS),
-      meetingCalled: false,
-      meetingCaller: deleteField(),
-      voteDeadline: deleteField(),
-      votingResult: deleteField(),
-      resultUntil: deleteField(),
-      winner: deleteField()
+      completedTasks
     });
 
     setStarting(false);
@@ -169,7 +156,7 @@ function GameLobby() {
 
   const finishGame = async () => {
     try {
-      await deleteDoc(doc(db, 'games', gameCode));
+      await deleteGame(gameCode);
       navigate('/');
     } catch (error) {
       console.error('Error deleting document: ', error);
@@ -179,10 +166,10 @@ function GameLobby() {
 
   const kickPlayer = async (playerToKick) => {
     if (playerToKick === playerName) return;
-    await updateGame(gameCode, { players: arrayRemove(playerToKick) });
+    await writeKick(gameCode, playerToKick);
   };
 
-  const updateSetting = (field, value) => updateGame(gameCode, { [field]: value });
+  const updateSetting = (field, value) => writeSetting(gameCode, field, value);
 
   if (loading) {
     return <div className="game-lobby"><ConnectionBanner connected={connected} />Loading game data…</div>;

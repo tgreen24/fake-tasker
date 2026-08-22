@@ -1,18 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { doc, runTransaction, deleteField } from 'firebase/firestore';
-import { db } from './firebase';
-import { updateGame } from './db';
+import { closeMeeting, markKilledDuringMeeting, submitVote as writeVote } from './game/mutations';
 import { usePlayerName } from './hooks/usePlayerName';
 import { useGameSync } from './hooks/useGameSync';
-import { RESULT_DISPLAY_MS, showingVoteResult } from './gameRoute';
-import {
-  alivePlayersOf,
-  decideOutcome,
-  resolveVote,
-  shouldResolveMeeting,
-  votesCastBy
-} from './voteLogic';
+import { showingVoteResult } from './gameRoute';
+import { alivePlayersOf, shouldResolveMeeting, votesCastBy } from './voteLogic';
 import ConnectionBanner from './components/ConnectionBanner';
 
 const HOST_HEAD_START_MS = 2500;
@@ -26,37 +18,6 @@ function DeadPlayersList({ deadPlayers }) {
       <p className="dead-player">{deadPlayers.join(', ')}</p>
     </div>
   );
-}
-
-// Any awake client may close the meeting; the transaction makes it happen exactly once.
-async function closeMeeting(gameCode, { force = false } = {}) {
-  const gameRef = doc(db, 'games', gameCode);
-  try {
-    await runTransaction(db, async (tx) => {
-      const snapshot = await tx.get(gameRef);
-      if (!snapshot.exists()) return;
-
-      const data = snapshot.data();
-      if (!data.meetingCalled) return;
-      if (!force && !shouldResolveMeeting(data)) return;
-
-      const { message, votedOut } = resolveVote(data);
-      const killList = data.killList || [];
-      const nextKillList = votedOut ? [...killList, votedOut] : killList;
-      const winner = decideOutcome(data.roles || {}, nextKillList);
-
-      tx.update(gameRef, {
-        meetingCalled: false,
-        votingResult: message,
-        resultUntil: Date.now() + RESULT_DISPLAY_MS,
-        voteDeadline: deleteField(),
-        ...(votedOut ? { killList: nextKillList } : {}),
-        ...(winner ? { gameEnded: true, winner } : {})
-      });
-    });
-  } catch (error) {
-    console.warn('[voting] could not close the meeting', error);
-  }
 }
 
 function VotingPage() {
@@ -135,7 +96,7 @@ function VotingPage() {
 
   const submitVote = async () => {
     if (!selectedVote || myVote) return;
-    await updateGame(gameCode, { [`votes.${playerName}`]: selectedVote });
+    await writeVote(gameCode, playerName, selectedVote);
   };
 
   const handleMarkAsKilled = async () => {
@@ -145,19 +106,7 @@ function VotingPage() {
     setIsDialogOpen(false);
     setSelectedKillPlayer('');
 
-    const ok = await updateGame(gameCode, { killList: nextKillList });
-    if (!ok) return;
-
-    const winner = decideOutcome(roles, nextKillList);
-    if (winner) {
-      await updateGame(gameCode, {
-        gameEnded: true,
-        winner,
-        meetingCalled: false,
-        voteDeadline: deleteField(),
-        resultUntil: deleteField()
-      });
-    }
+    await markKilledDuringMeeting(gameCode, selectedKillPlayer, nextKillList, roles);
   };
 
   if (loading) {
