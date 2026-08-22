@@ -1,3 +1,4 @@
+import { isHost } from './host';
 import { decideOutcome } from '../voteLogic';
 
 const CREWMATE = 'Crewmate';
@@ -6,7 +7,7 @@ const IMPOSTER = 'Imposter';
 const playersWithRole = (roles, role) =>
   Object.keys(roles).filter((player) => roles[player] === role).sort();
 
-export function deriveRoundState(gameData, playerName) {
+export function deriveRoundState(gameData, playerName, uid) {
   const roles = gameData?.roles || {};
   const killList = gameData?.killList || [];
   const sabotages = gameData?.sabotages || {};
@@ -24,7 +25,7 @@ export function deriveRoundState(gameData, playerName) {
 
   return {
     role: roles[playerName],
-    isCreator: gameData?.creator === playerName,
+    isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
     killCooldown: gameData?.killCooldown || 30,
     killList,

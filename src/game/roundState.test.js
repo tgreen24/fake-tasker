@@ -2,8 +2,10 @@ import {
   deriveRoundState, everyoneFinishedTasks, toggledTaskList, winnerAfterKill
 } from './roundState';
 
+const HOST_UID = 'uid-tyler';
 const game = (over = {}) => ({
   creator: 'tyler',
+  creatorUid: HOST_UID,
   roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' },
   assignedTasks: { sam: ['Dishes', 'Sweep'], kai: ['Dishes'] },
   completedTasks: { sam: ['Dishes'], kai: [] },
@@ -25,9 +27,10 @@ describe('deriveRoundState', () => {
     expect(deriveRoundState(game({ killList: ['sam'] }), 'sam').isDead).toBe(true);
   });
 
-  test('identifies the host', () => {
-    expect(deriveRoundState(game(), 'tyler').isCreator).toBe(true);
-    expect(deriveRoundState(game(), 'sam').isCreator).toBe(false);
+  test('identifies the host by account, not by display name', () => {
+    expect(deriveRoundState(game(), 'tyler', HOST_UID).isCreator).toBe(true);
+    expect(deriveRoundState(game(), 'sam', 'uid-sam').isCreator).toBe(false);
+    expect(deriveRoundState(game(), 'tyler', 'uid-sam').isCreator).toBe(false);
   });
 
   test('hides the acting imposter from their own fellow list', () => {

@@ -1,8 +1,9 @@
+import { isHost } from './host';
 import { MAX_PLAYERS, MIN_PLAYERS } from './constants';
 
 export { MIN_PLAYERS };
 
-export function deriveLobbyState(gameData, playerName) {
+export function deriveLobbyState(gameData, playerName, uid) {
   const players = gameData?.players || [];
   const tasks = gameData?.tasks || [];
 
@@ -10,7 +11,7 @@ export function deriveLobbyState(gameData, playerName) {
     players,
     tasks,
     maxPlayers: MAX_PLAYERS,
-    isCreator: !!gameData && gameData.creator === playerName,
+    isCreator: isHost(gameData, uid),
     imposterCount: gameData?.imposterCount || 1,
     tasksPerCrewmate: gameData?.tasksPerCrewmate || 3,
     killCooldown: gameData?.killCooldown || 30,

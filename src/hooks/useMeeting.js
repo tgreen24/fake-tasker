@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { closeMeeting, markKilledDuringMeeting, submitVote as writeVote } from '../game/mutations';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
 import { shouldResolveMeeting } from '../voteLogic';
+import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
@@ -37,7 +38,7 @@ export function useMeeting(gameCode) {
   const [selectedKillPlayer, setSelectedKillPlayer] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(null);
 
-  const meeting = useMemo(() => deriveMeetingState(gameData, playerName), [gameData, playerName]);
+  const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid()), [gameData, playerName]);
   const displayedResult = useTypewriter(meeting.votingResult);
 
   const { meetingCalled, voteDeadline, isCreator, players } = meeting;

@@ -1,10 +1,11 @@
+import { isHost } from './host';
 import { showingVoteResult } from '../gameRoute';
 import { alivePlayersOf, votesCastBy } from '../voteLogic';
 
 export const HOST_HEAD_START_MS = 2500;
 export const PEER_STAGGER_MS = 750;
 
-export function deriveMeetingState(gameData, playerName) {
+export function deriveMeetingState(gameData, playerName, uid) {
   const players = gameData?.players || [];
   const roles = gameData?.roles || {};
   const deadPlayers = gameData?.killList || [];
@@ -18,7 +19,7 @@ export function deriveMeetingState(gameData, playerName) {
     deadPlayers,
     alivePlayers,
     role: roles[playerName],
-    isCreator: gameData?.creator === playerName,
+    isCreator: isHost(gameData, uid),
     isAlive: !deadPlayers.includes(playerName),
     meetingCaller: gameData?.meetingCaller || '',
     meetingCalled: !!gameData?.meetingCalled,

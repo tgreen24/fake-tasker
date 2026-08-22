@@ -70,4 +70,6 @@ export function ensureSignedIn() {
   return signInPromise;
 }
 
+export const currentUid = () => auth.currentUser?.uid || null;
+
 export { db, auth };

@@ -5,9 +5,11 @@ import {
 import { RESULT_DISPLAY_MS } from '../gameRoute';
 
 const NOW = 1_000_000;
+const HOST_UID = 'uid-tyler';
 const meeting = (over = {}) => ({
   players: ['tyler', 'sam', 'kai'],
   creator: 'tyler',
+  creatorUid: HOST_UID,
   roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' },
   killList: [],
   votes: {},
@@ -24,10 +26,11 @@ describe('deriveMeetingState', () => {
   });
 
   test('knows whether the viewer is alive and hosting', () => {
-    const s = deriveMeetingState(meeting({ killList: ['sam'] }), 'sam');
+    const s = deriveMeetingState(meeting({ killList: ['sam'] }), 'sam', 'uid-sam');
     expect(s.isAlive).toBe(false);
     expect(s.isCreator).toBe(false);
-    expect(deriveMeetingState(meeting(), 'tyler').isCreator).toBe(true);
+    expect(deriveMeetingState(meeting(), 'tyler', HOST_UID).isCreator).toBe(true);
+    expect(deriveMeetingState(meeting(), 'tyler', 'uid-sam').isCreator).toBe(false);
   });
 
   test('surfaces the viewer own vote once cast', () => {

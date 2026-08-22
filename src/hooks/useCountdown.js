@@ -6,6 +6,7 @@ import {
 import {
   deriveRoundState, everyoneFinishedTasks, toggledTaskList, winnerAfterKill
 } from '../game/roundState';
+import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
@@ -33,7 +34,7 @@ export function useCountdown(gameCode) {
   const [sabotageCooldownLeft, setSabotageCooldownLeft] = useSecondsRemaining(0);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
 
-  const round = useMemo(() => deriveRoundState(gameData, playerName), [gameData, playerName]);
+  const round = useMemo(() => deriveRoundState(gameData, playerName, currentUid()), [gameData, playerName]);
 
   const actions = useMemo(() => ({
     toggleTask: async (task) => {

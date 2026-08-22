@@ -6,6 +6,7 @@ import {
 } from '../game/mutations';
 import { deriveLobbyState, validateNewTask, validateStart } from '../game/lobbyState';
 import { buildRound } from '../game/roleAssignment';
+import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
@@ -18,7 +19,7 @@ export function useLobby(gameCode) {
   const [starting, setStarting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const lobby = useMemo(() => deriveLobbyState(gameData, playerName), [gameData, playerName]);
+  const lobby = useMemo(() => deriveLobbyState(gameData, playerName, currentUid()), [gameData, playerName]);
 
   const addTask = useCallback(async () => {
     const { error, task } = validateNewTask(newTask, lobby.tasks);
