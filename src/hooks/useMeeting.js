@@ -1,0 +1,109 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { closeMeeting, markKilledDuringMeeting, submitVote as writeVote } from '../game/mutations';
+import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
+import { shouldResolveMeeting } from '../voteLogic';
+import { usePlayerName } from './usePlayerName';
+import { useGameSync } from './useGameSync';
+
+const TYPEWRITER_MS = 40;
+
+function useTypewriter(text) {
+  const [shown, setShown] = useState('');
+
+  useEffect(() => {
+    if (!text) {
+      setShown('');
+      return undefined;
+    }
+    setShown('');
+    let index = 0;
+    const timer = setInterval(() => {
+      index += 1;
+      setShown(text.slice(0, index));
+      if (index >= text.length) clearInterval(timer);
+    }, TYPEWRITER_MS);
+    return () => clearInterval(timer);
+  }, [text]);
+
+  return shown;
+}
+
+export function useMeeting(gameCode) {
+  const playerName = usePlayerName(gameCode);
+  const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+
+  const [selectedVote, setSelectedVote] = useState('');
+  const [killDialogOpen, setKillDialogOpen] = useState(false);
+  const [selectedKillPlayer, setSelectedKillPlayer] = useState('');
+  const [secondsLeft, setSecondsLeft] = useState(null);
+
+  const meeting = useMemo(() => deriveMeetingState(gameData, playerName), [gameData, playerName]);
+  const displayedResult = useTypewriter(meeting.votingResult);
+
+  const { meetingCalled, voteDeadline, isCreator, players } = meeting;
+  const myTurnDelay = resolverDelayMs(players, playerName, isCreator);
+
+  useEffect(() => {
+    if (!meetingCalled) return undefined;
+
+    const attempt = () => {
+      if (document.hidden) return;
+      if (!shouldResolveMeeting(gameData)) return;
+      closeMeeting(gameCode);
+    };
+
+    const timer = setTimeout(attempt, myTurnDelay);
+    return () => clearTimeout(timer);
+  }, [gameData, meetingCalled, gameCode, myTurnDelay]);
+
+  useEffect(() => {
+    if (!meetingCalled || !voteDeadline) {
+      setSecondsLeft(null);
+      return undefined;
+    }
+    const update = () => setSecondsLeft(secondsUntil(voteDeadline));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [meetingCalled, voteDeadline]);
+
+  const submitVote = useCallback(async () => {
+    if (!selectedVote || meeting.myVote) return;
+    await writeVote(gameCode, playerName, selectedVote);
+  }, [gameCode, playerName, selectedVote, meeting.myVote]);
+
+  const confirmKill = useCallback(async () => {
+    if (!selectedKillPlayer) return;
+
+    const nextKillList = [...meeting.deadPlayers, selectedKillPlayer];
+    setKillDialogOpen(false);
+    setSelectedKillPlayer('');
+    await markKilledDuringMeeting(gameCode, selectedKillPlayer, nextKillList, meeting.roles);
+  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles]);
+
+  const actions = useMemo(() => ({
+    selectVote: setSelectedVote,
+    submitVote,
+    forceEndVote: () => closeMeeting(gameCode, { force: true }),
+    openKillDialog: () => setKillDialogOpen(true),
+    closeKillDialog: () => setKillDialogOpen(false),
+    selectKillTarget: setSelectedKillPlayer,
+    confirmKill
+  }), [gameCode, submitVote, confirmKill]);
+
+  return {
+    state: {
+      ...meeting,
+      playerName,
+      selectedVote,
+      selectedKillPlayer,
+      killDialogOpen,
+      secondsLeft,
+      displayedResult,
+      killTargets: meeting.killableBy(playerName)
+    },
+    actions,
+    loading,
+    connected
+  };
+}
