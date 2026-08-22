@@ -45,7 +45,7 @@ function Home() {
       }
 
       if (!gameCode) {
-        setErrorMessage('Could not create a game right now. Please try again.');
+        setErrorMessage('Every code we tried was taken. Please try again.');
         return;
       }
 
@@ -69,7 +69,11 @@ function Home() {
       navigate(`/lobby/${gameCode}`, { state: { playerName: name } });
     } catch (error) {
       console.error('Error creating game:', error);
-      setErrorMessage('Could not create a game right now. Please try again.');
+      setErrorMessage(
+        error?.code === 'permission-denied'
+          ? 'Your app is out of date. Please reload the page.'
+          : 'Could not create a game right now. Please try again.'
+      );
     } finally {
       setCreating(false);
     }
