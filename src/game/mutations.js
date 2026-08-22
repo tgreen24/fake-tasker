@@ -6,6 +6,9 @@ import { auth, db } from '../firebase';
 import { updateGame } from '../db';
 import { RESULT_DISPLAY_MS } from '../gameRoute';
 import { VOTE_DURATION_MS, decideOutcome, resolveVote, shouldResolveMeeting } from '../voteLogic';
+import {
+  SABOTAGE_COOLDOWN_SECONDS, cooldownExpiryFor, pauseCooldowns, resumeCooldowns
+} from './cooldown';
 
 import { GAME_LIFETIME_MS, MAX_PLAYERS } from './constants';
 
@@ -65,6 +68,8 @@ export const startRound = (gameCode, { roles, assignedTasks, imposterHistory, co
     killList: [],
     votes: {},
     sabotages: {},
+    killCooldowns: {},
+    sabotageCooldowns: {},
     gameStarted: true,
     gameEnded: false,
     meetingCalled: false,
@@ -84,6 +89,8 @@ export const endRound = (gameCode) => updateGame(gameCode, {
   meetingCalled: false,
   sabotages: {},
   votes: {},
+  killCooldowns: {},
+  sabotageCooldowns: {},
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -96,6 +103,8 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   meetingCalled: false,
   votes: {},
   sabotages: {},
+  killCooldowns: {},
+  sabotageCooldowns: {},
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -108,11 +117,19 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
 export const endGame = (gameCode, winner) =>
   updateGame(gameCode, { gameEnded: true, winner });
 
-export const recordKill = (gameCode, crewmate) =>
-  updateGame(gameCode, { killList: arrayUnion(crewmate) });
+// Kill and cooldown land in one write, so a cooldown cannot be lost by the
+// second write failing after the first succeeded.
+export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds) =>
+  updateGame(gameCode, {
+    killList: arrayUnion(crewmate),
+    [`killCooldowns.${playerName}`]: cooldownExpiryFor(cooldownSeconds)
+  });
 
-export const undoKill = (gameCode, crewmate) =>
-  updateGame(gameCode, { killList: arrayRemove(crewmate) });
+export const undoKill = (gameCode, crewmate, playerName) =>
+  updateGame(gameCode, {
+    killList: arrayRemove(crewmate),
+    [`killCooldowns.${playerName}`]: deleteField()
+  });
 
 export const setCompletedTasks = (gameCode, playerName, tasks) =>
   updateGame(gameCode, { [`completedTasks.${playerName}`]: tasks });
@@ -121,20 +138,43 @@ export const startSabotage = (gameCode, imposter, crewmate) =>
   updateGame(gameCode, { [`sabotages.${imposter}`]: { sabotagedPlayer: crewmate } });
 
 export const clearSabotage = (gameCode, imposter) =>
-  updateGame(gameCode, { [`sabotages.${imposter}`]: deleteField() });
+  updateGame(gameCode, {
+    [`sabotages.${imposter}`]: deleteField(),
+    [`sabotageCooldowns.${imposter}`]: cooldownExpiryFor(SABOTAGE_COOLDOWN_SECONDS)
+  });
 
 // ── meetings ───────────────────────────────────────────────
 
-export const callMeeting = (gameCode, playerName) => updateGame(gameCode, {
-  meetingCalled: true,
-  meetingCaller: playerName,
-  voteDeadline: Date.now() + VOTE_DURATION_MS,
-  votes: {},
-  sabotages: {},
-  votingResult: deleteField(),
-  resultUntil: deleteField(),
-  ejected: deleteField()
-});
+// Freezes both cooldowns for the duration, so a long meeting does not quietly
+// serve someone's sabotage cooldown while nobody is playing.
+export async function callMeeting(gameCode, playerName) {
+  try {
+    await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef(gameCode));
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.data();
+      const now = Date.now();
+
+      tx.update(gameRef(gameCode), {
+        meetingCalled: true,
+        meetingCaller: playerName,
+        voteDeadline: now + VOTE_DURATION_MS,
+        votes: {},
+        sabotages: {},
+        killCooldowns: pauseCooldowns(data.killCooldowns, now),
+        sabotageCooldowns: pauseCooldowns(data.sabotageCooldowns, now),
+        votingResult: deleteField(),
+        resultUntil: deleteField(),
+        ejected: deleteField()
+      });
+    });
+    return true;
+  } catch (error) {
+    console.warn('[meeting] could not call a meeting', error);
+    return false;
+  }
+}
 
 export const submitVote = (gameCode, playerName, vote) =>
   updateGame(gameCode, { [`votes.${playerName}`]: vote });
@@ -177,6 +217,8 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
         votingResult: message,
         ejected: votedOut || deleteField(),
         resultUntil: Date.now() + RESULT_DISPLAY_MS,
+        killCooldowns: resumeCooldowns(data.killCooldowns),
+        sabotageCooldowns: resumeCooldowns(data.sabotageCooldowns),
         voteDeadline: deleteField(),
         ...(votedOut ? { killList: nextKillList } : {}),
         ...(winner ? { gameEnded: true, winner } : {})

@@ -32,6 +32,8 @@ export function deriveRoundState(gameData, playerName, uid) {
     isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
     killCooldown: gameData?.killCooldown || 30,
+    killCooldownUntil: gameData?.killCooldowns?.[playerName],
+    sabotageCooldownUntil: gameData?.sabotageCooldowns?.[playerName],
     killList,
     crewmates,
     fellowImposters: playersWithRole(roles, IMPOSTER).filter((player) => player !== playerName),

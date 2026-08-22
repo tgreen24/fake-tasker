@@ -7,6 +7,8 @@ import {
   deriveRoundState, everyoneFinishedTasks, toggledTaskList, winnerAfterKill
 } from '../game/roundState';
 import { currentUid } from '../firebase';
+import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
+import { useNow } from './useNow';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
@@ -20,27 +22,12 @@ const INTRO_WINDOW_MS = 10000;
 function justHappened(timestamp, now = Date.now()) {
   return !!timestamp && Math.abs(now - timestamp) < INTRO_WINDOW_MS;
 }
-const SABOTAGE_COOLDOWN_SECONDS = 120;
-
-function useSecondsRemaining(initial) {
-  const [seconds, setSeconds] = useState(initial);
-
-  useEffect(() => {
-    if (seconds <= 0) return undefined;
-    const timer = setTimeout(() => setSeconds((previous) => previous - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [seconds]);
-
-  return [seconds, setSeconds];
-}
 
 export function useCountdown(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
 
   const [countdown, setCountdown] = useState(null);
-  const [killCooldownLeft, setKillCooldownLeft] = useSecondsRemaining(0);
-  const [sabotageCooldownLeft, setSabotageCooldownLeft] = useSecondsRemaining(0);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
   const [blended, setBlended] = useState(false);
 
@@ -64,6 +51,13 @@ export function useCountdown(gameCode) {
   }, [countdown]);
 
   const showIntro = !!introKind && (countdown === null || countdown > 0);
+
+  // Only tick while something is actually counting; a frozen cooldown is static.
+  const now = useNow(isTicking(round.killCooldownUntil) || isTicking(round.sabotageCooldownUntil));
+  const killCooldownLeft = remainingCooldownSeconds(round.killCooldownUntil, round.killCooldown, now);
+  const sabotageCooldownLeft = remainingCooldownSeconds(
+    round.sabotageCooldownUntil, SABOTAGE_COOLDOWN_SECONDS, now
+  );
 
   // The role reveal is deliberately loud, then the screen blends back so a
   // glance from across the room says nothing. Returning from a meeting skips
@@ -91,17 +85,12 @@ export function useCountdown(gameCode) {
 
     toggleKill: async (crewmate) => {
       if (round.killList.includes(crewmate)) {
-        setKillCooldownLeft(0);
-        await undoKill(gameCode, crewmate);
+        await undoKill(gameCode, crewmate, playerName);
         return;
       }
       if (killCooldownLeft > 0) return;
 
-      setKillCooldownLeft(round.killCooldown);
-      if (!(await recordKill(gameCode, crewmate))) {
-        setKillCooldownLeft(0);
-        return;
-      }
+      if (!(await recordKill(gameCode, crewmate, playerName, round.killCooldown))) return;
 
       const winner = winnerAfterKill(gameData, [...round.killList, crewmate]);
       if (winner) await endGame(gameCode, winner);
@@ -119,15 +108,8 @@ export function useCountdown(gameCode) {
       await startSabotage(gameCode, playerName, crewmate);
     },
 
-    clearMySabotage: async () => {
-      setSabotageCooldownLeft(SABOTAGE_COOLDOWN_SECONDS);
-      await clearSabotage(gameCode, playerName);
-    }
-  }), [
-    gameCode, playerName, gameData, round,
-    killCooldownLeft, sabotageCooldownLeft,
-    setKillCooldownLeft, setSabotageCooldownLeft
-  ]);
+    clearMySabotage: () => clearSabotage(gameCode, playerName)
+  }), [gameCode, playerName, gameData, round, killCooldownLeft, sabotageCooldownLeft]);
 
   return {
     state: {
