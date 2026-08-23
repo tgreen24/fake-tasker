@@ -5,6 +5,7 @@ import ConnectionBanner from './components/ConnectionBanner';
 import PlayerAvatar from './components/PlayerAvatar';
 import ScreenHeader from './components/ScreenHeader';
 import HowToPlay from './components/HowToPlay';
+import InviteButton from './components/InviteButton';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 
@@ -30,6 +31,7 @@ function GameLobby() {
       <div className="lobby-header">
         <div className="game-code">
           Game Code: <strong>{gameCode}</strong>
+          <InviteButton gameCode={gameCode} />
         </div>
       </div>
 

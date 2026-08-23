@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import Home from './Home';
 import GameLobby from './GameLobby';
 import JoinGame from './JoinGame';
+import JoinByLink from './JoinByLink';
 import Countdown from './Countdown';
 import GameOver from './GameOver';
 import VotingPage from './VotingPage';
@@ -40,6 +41,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/join" element={<JoinGame />} />
+        <Route path="/j/:gameCode" element={<JoinByLink />} />
         <Route path="/lobby/:gameCode" element={<GameLobby />} />
         <Route path="/countdown/:gameCode" element={<Countdown />} />
         <Route path="/gameover/:gameCode" element={<GameOver />} />

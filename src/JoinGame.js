@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
-import { MAX_PLAYERS, joinGame } from './game/mutations';
+import { attemptJoin } from './game/joinGameFlow';
 import { saveSession } from './session';
 
 function JoinGame() {
@@ -22,49 +20,18 @@ function JoinGame() {
       return;
     }
 
-    const code = gameCode.trim().toUpperCase();
-    const gameRef = doc(db, 'games', code);
-
     setJoining(true);
     setErrorMessage('');
 
     try {
-      const gameDoc = await getDoc(gameRef);
-
-      if (!gameDoc.exists()) {
-        setErrorMessage('Invalid game code. Please try again.');
+      const result = await attemptJoin(gameCode, playerName);
+      if (result.error) {
+        setErrorMessage(result.error);
         return;
       }
 
-      const gameData = gameDoc.data();
-      const currentPlayers = gameData.players || [];
-      const alreadySeated = currentPlayers.includes(playerName);
-
-      // Reclaiming your own seat after losing the tab is a reconnect, not a join.
-      if (gameData.gameStarted) {
-        if (!alreadySeated) {
-          setErrorMessage('That game is already in progress.');
-          return;
-        }
-        saveSession(code, playerName);
-        navigate(`/lobby/${code}`, { state: { playerName } });
-        return;
-      }
-
-      if (alreadySeated) {
-        setErrorMessage(`Someone in this game is already called "${playerName}". Go back and pick another name.`);
-        return;
-      }
-
-      if (currentPlayers.length >= MAX_PLAYERS) {
-        setErrorMessage('The game is full. Please try another game.');
-        return;
-      }
-
-      await joinGame(code, playerName);
-
-      saveSession(code, playerName);
-      navigate(`/lobby/${code}`, { state: { playerName } });
+      saveSession(result.code, result.name);
+      navigate(`/lobby/${result.code}`, { state: { playerName: result.name } });
     } catch (error) {
       console.error('Error joining game: ', error);
       setErrorMessage('Something went wrong. Please try again.');

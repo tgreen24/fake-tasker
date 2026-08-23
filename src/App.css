@@ -1213,3 +1213,46 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .leave-game:hover:not(:disabled) { background: none; color: var(--text-dim); }
 .leave-game.confirming { color: var(--danger); }
+
+/* ── invite ────────────────────────────────────────────────── */
+
+.invite {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.invite-button {
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  font-size: .85rem;
+  padding: 10px 16px;
+}
+
+.invite-button:hover:not(:disabled) { background: var(--surface-sunk); }
+
+.invite-status {
+  font-size: .72rem;
+  color: var(--text-dim);
+  letter-spacing: normal;
+  text-transform: none;
+  font-weight: 500;
+  word-break: break-all;
+  max-width: 100%;
+}
+
+.invited-code {
+  font-size: .8rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.invited-code strong {
+  color: var(--text);
+  font-size: 1.1rem;
+  letter-spacing: .12em;
+}
