@@ -89,8 +89,14 @@ export function leaveGame(gameCode, playerName, { inRound = false, role, tasksOu
   });
 }
 
+// Removing the seat has to remove the account behind it too. It did not, so
+// playerUids grew every time somebody was kicked -- and that map is what the
+// private role documents are addressed by.
 export const kickPlayer = (gameCode, playerName) =>
-  updateGame(gameCode, { players: arrayRemove(playerName) });
+  updateGame(gameCode, {
+    players: arrayRemove(playerName),
+    [`playerUids.${playerName}`]: deleteField()
+  });
 
 // ── lobby ──────────────────────────────────────────────────
 
@@ -144,6 +150,7 @@ export async function startRound(gameCode, { roles, assignedTasks, imposterHisto
       resultUntil: deleteField(),
       voteDeadline: deleteField(),
       ejected: deleteField(),
+      leftBy: deleteField(),
       winner: deleteField(),
       winReason: deleteField()
     });
