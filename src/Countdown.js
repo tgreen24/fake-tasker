@@ -95,7 +95,7 @@ function Countdown() {
                     {crewmates.map((crewmate) => (
                       <Selectable
                         key={crewmate}
-                        className={`kill-item ${killList.includes(crewmate) ? 'selected' : ''}`}
+                        className={`task-item ${killList.includes(crewmate) ? 'selected' : ''}`}
                         selected={killList.includes(crewmate)}
                         label={`${crewmate}${killList.includes(crewmate) ? ', dead' : ''}`}
                         onSelect={() => actions.toggleKill(crewmate)}

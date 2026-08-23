@@ -9,12 +9,19 @@ import ScreenHeader from './components/ScreenHeader';
 import TypedVerdict from './components/TypedVerdict';
 import { roleName, roleNameLower } from './game/terminology';
 
-function DeadPlayersList({ deadPlayers }) {
+function DeadPlayersList({ deadPlayers, colors }) {
   if (deadPlayers.length === 0) return null;
   return (
     <div className="dead-players-list">
-      <h3>Dead Players</h3>
-      <p className="dead-player">{deadPlayers.join(', ')}</p>
+      <h3>Out of the game</h3>
+      <div className="dead-grid">
+        {deadPlayers.map((player) => (
+          <div key={player} className="dead-card">
+            <PlayerAvatar name={player} color={colors[player]} />
+            <span>{player}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -88,7 +95,7 @@ function VotingPage() {
             </div>
             <p className="vote-progress">{waitingLine}</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
-            <DeadPlayersList deadPlayers={deadPlayers} />
+            <DeadPlayersList deadPlayers={deadPlayers} colors={colors} />
           </>
         ) : myVote ? (
           <>
@@ -96,7 +103,7 @@ function VotingPage() {
             {voteTimer}
             <p className="vote-progress">Waiting for other players… ({waitingLine})</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
-            <DeadPlayersList deadPlayers={deadPlayers} />
+            <DeadPlayersList deadPlayers={deadPlayers} colors={colors} />
           </>
         ) : (
           <>
@@ -143,7 +150,7 @@ function VotingPage() {
 
             <p className="vote-progress">{waitingLine}</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
-            <DeadPlayersList deadPlayers={deadPlayers} />
+            <DeadPlayersList deadPlayers={deadPlayers} colors={colors} />
 
             {killDialogOpen && (
               <div className="dialog-overlay">

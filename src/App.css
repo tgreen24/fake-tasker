@@ -1156,3 +1156,45 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .voting-action:hover { background: var(--danger-soft); }
 .voting-action:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* A traitor's target rows are the tasker task rows, down to the green check.
+   Red selection made the role readable from across the room. */
+.kill-list .task-item::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+
+.kill-list .task-item.selected {
+  color: var(--text-dim);
+  border-color: rgba(46, 204, 113, .4);
+  background: var(--success-soft);
+}
+
+.kill-list .task-item.selected::after {
+  border-color: var(--success);
+  background: var(--success);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.dead-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 12px 8px;
+}
+
+.dead-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  font-size: .76rem;
+  color: var(--text-dim);
+  text-align: center;
+  word-break: break-word;
+}
+
+.dead-card .avatar { width: 46px; height: 46px; font-size: .9rem; filter: grayscale(.7); opacity: .55; }
