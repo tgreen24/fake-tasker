@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { attemptJoin } from './game/joinGameFlow';
 import { loadSession, saveSession } from './session';
-import ScreenHeader from './components/ScreenHeader';
 
 // Arrived from a link in a group chat: the code is in the URL, the name is not.
 function JoinByLink() {
@@ -46,8 +45,7 @@ function JoinByLink() {
   return (
     <div className="join-game-container">
       <div className="join-game-card">
-        <ScreenHeader title="You're invited" />
-        <p className="invited-code">Game <strong>{code}</strong></p>
+        <p className="joining-line">Joining game <strong>{code}</strong></p>
 
         <form onSubmit={submit} className="join-form">
           <input

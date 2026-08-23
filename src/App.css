@@ -159,17 +159,26 @@ p { margin: 0; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.game-code-text {
+  flex: 1;
   text-align: center;
+  padding-left: 42px;
   font-size: .72rem;
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--text-dim);
-  box-shadow: var(--shadow);
 }
 
-.game-code strong {
+.game-code-text strong {
   display: block;
   margin-top: 6px;
   font-size: 2.4rem;
@@ -1216,23 +1225,21 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 /* ── invite ────────────────────────────────────────────────── */
 
-.invite {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.invite-button {
+.invite-icon {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
-  color: var(--text);
+  color: var(--text-dim);
   box-shadow: inset 0 0 0 1px var(--border-strong);
-  font-size: .85rem;
-  padding: 10px 16px;
 }
 
-.invite-button:hover:not(:disabled) { background: var(--surface-sunk); }
+.invite-icon:hover:not(:disabled) { background: var(--surface-sunk); color: var(--text); }
+.invite-icon.copied { color: var(--success); box-shadow: inset 0 0 0 1px rgba(46, 204, 113, .5); }
 
 .invite-status {
   font-size: .72rem;
@@ -1244,15 +1251,18 @@ ul { list-style: none; margin: 0; padding: 0; }
   max-width: 100%;
 }
 
-.invited-code {
-  font-size: .8rem;
-  letter-spacing: .1em;
+.joining-line {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--text-dim);
 }
 
-.invited-code strong {
+.joining-line strong {
   color: var(--text);
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   letter-spacing: .12em;
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
 }

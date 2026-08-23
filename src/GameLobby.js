@@ -30,7 +30,10 @@ function GameLobby() {
       <ScreenHeader title="Lobby" />
       <div className="lobby-header">
         <div className="game-code">
-          Game Code: <strong>{gameCode}</strong>
+          <div className="game-code-text">
+            Game Code
+            <strong>{gameCode}</strong>
+          </div>
           <InviteButton gameCode={gameCode} />
         </div>
       </div>
