@@ -1,11 +1,12 @@
 import {
-  doc, setDoc, deleteDoc, updateDoc, runTransaction,
+  doc, setDoc, deleteDoc, updateDoc, runTransaction, increment,
   arrayUnion, arrayRemove, deleteField, serverTimestamp, Timestamp
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { updateGame } from '../db';
 import { RESULT_DISPLAY_MS } from '../gameRoute';
-import { VOTE_DURATION_MS, decideOutcome, resolveVote, shouldResolveMeeting } from '../voteLogic';
+import { VOTE_DURATION_MS, resolveVote, shouldResolveMeeting } from '../voteLogic';
+import { decideOutcomeFromCounts } from './outcome';
 import {
   SABOTAGE_COOLDOWN_SECONDS, cooldownExpiryFor, pauseCooldowns, resumeCooldowns
 } from './cooldown';
@@ -70,6 +71,8 @@ export const startRound = (gameCode, { roles, assignedTasks, imposterHistory, co
     sabotages: {},
     killCooldowns: {},
     sabotageCooldowns: {},
+    revealed: {},
+    tasksCompleted: 0,
     gameStarted: true,
     gameEnded: false,
     meetingCalled: false,
@@ -92,6 +95,8 @@ export const endRound = (gameCode) => updateGame(gameCode, {
   votes: {},
   killCooldowns: {},
   sabotageCooldowns: {},
+  revealed: {},
+  tasksCompleted: 0,
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -106,6 +111,8 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   sabotages: {},
   killCooldowns: {},
   sabotageCooldowns: {},
+  revealed: {},
+  tasksCompleted: 0,
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -121,17 +128,29 @@ export const endGame = (gameCode, winner, winReason) =>
 
 // Kill and cooldown land in one write, so a cooldown cannot be lost by the
 // second write failing after the first succeeded.
-export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds) =>
+export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds, victimRole) =>
   updateGame(gameCode, {
     killList: arrayUnion(crewmate),
+    [`revealed.${crewmate}`]: victimRole,
     [`killCooldowns.${playerName}`]: cooldownExpiryFor(cooldownSeconds)
   });
 
 export const undoKill = (gameCode, crewmate, playerName) =>
   updateGame(gameCode, {
     killList: arrayRemove(crewmate),
+    [`revealed.${crewmate}`]: deleteField(),
     [`killCooldowns.${playerName}`]: deleteField()
   });
+
+// Published by the player themselves once they are out, since being out makes
+// it public anyway and nobody else will be able to read it.
+export const publishOwnRole = (gameCode, playerName, role) =>
+  updateGame(gameCode, { [`revealed.${playerName}`]: role });
+
+// One shared total rather than a count per player: a traitor having no task
+// count would identify them.
+export const addTaskProgress = (gameCode, delta) =>
+  updateGame(gameCode, { tasksCompleted: increment(delta) });
 
 export const setCompletedTasks = (gameCode, playerName, tasks) =>
   updateGame(gameCode, { [`completedTasks.${playerName}`]: tasks });
@@ -181,11 +200,18 @@ export async function callMeeting(gameCode, playerName) {
 export const submitVote = (gameCode, playerName, vote) =>
   updateGame(gameCode, { [`votes.${playerName}`]: vote });
 
-export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, roles) {
-  const ok = await updateGame(gameCode, { killList: nextKillList });
+export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, roles, gameDataForOutcome) {
+  const ok = await updateGame(gameCode, {
+    killList: nextKillList,
+    [`revealed.${crewmate}`]: roles[crewmate]
+  });
   if (!ok) return false;
 
-  const winner = decideOutcome(roles, nextKillList);
+  const winner = decideOutcomeFromCounts({
+    ...gameDataForOutcome,
+    killList: nextKillList,
+    revealed: { ...(gameDataForOutcome?.revealed || {}), [crewmate]: roles[crewmate] }
+  });
   if (winner) {
     await updateGame(gameCode, {
       gameEnded: true,
@@ -213,7 +239,10 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
       const { message, votedOut } = resolveVote(data);
       const killList = data.killList || [];
       const nextKillList = votedOut ? [...killList, votedOut] : killList;
-      const winner = decideOutcome(data.roles || {}, nextKillList);
+
+      // The ejected player publishes their own role, so the winner cannot be
+      // settled in this transaction -- it is decided once that lands.
+      const winner = votedOut ? null : decideOutcomeFromCounts(data);
 
       tx.update(gameRef(gameCode), {
         meetingCalled: false,

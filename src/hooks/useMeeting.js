@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { closeMeeting, markKilledDuringMeeting, submitVote as writeVote } from '../game/mutations';
+import {
+  closeMeeting, markKilledDuringMeeting, publishOwnRole, submitVote as writeVote
+} from '../game/mutations';
+import { useSettleOutcome } from './useSettleOutcome';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
 import { VOTE_DURATION_MS, shouldResolveMeeting } from '../voteLogic';
 import { currentUid } from '../firebase';
@@ -41,6 +44,7 @@ function useTypewriter(text, delayMs = 0) {
 export function useMeeting(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  useSettleOutcome(gameCode, gameData);
 
   const [selectedVote, setSelectedVote] = useState('');
   const [killDialogOpen, setKillDialogOpen] = useState(false);
@@ -94,8 +98,22 @@ export function useMeeting(gameCode) {
     const nextKillList = [...meeting.deadPlayers, selectedKillPlayer];
     setKillDialogOpen(false);
     setSelectedKillPlayer('');
-    await markKilledDuringMeeting(gameCode, selectedKillPlayer, nextKillList, meeting.roles);
-  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles]);
+    await markKilledDuringMeeting(
+      gameCode, selectedKillPlayer, nextKillList, meeting.roles, gameData
+    );
+  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles, gameData]);
+
+  // Once you are out your role is public, and after the schema change you are
+  // the only one who can still read it -- so you publish it, and the verdict
+  // follows from the counts everyone can see.
+  const myRole = meeting.role;
+  const iWasEjected = meeting.ejected === playerName;
+  const myRolePublished = !!gameData?.revealed?.[playerName];
+
+  useEffect(() => {
+    if (!iWasEjected || !myRole || myRolePublished) return;
+    publishOwnRole(gameCode, playerName, myRole);
+  }, [iWasEjected, myRole, myRolePublished, gameCode, playerName]);
 
   const actions = useMemo(() => ({
     selectVote: setSelectedVote,

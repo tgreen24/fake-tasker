@@ -1,5 +1,5 @@
 import { isHost } from './host';
-import { decideOutcome } from '../voteLogic';
+import { taskProgress } from './outcome';
 
 const CREWMATE = 'Crewmate';
 const IMPOSTER = 'Imposter';
@@ -20,14 +20,15 @@ export function deriveRoundState(gameData, playerName, uid) {
     (imposter) => sabotages[imposter]?.sabotagedPlayer === playerName
   );
 
-  const totalTasks = crewmates.reduce((sum, mate) => sum + (assigned[mate]?.length || 0), 0);
-  const totalCompletedTasks = crewmates.reduce((sum, mate) => sum + (completed[mate]?.length || 0), 0);
+  const progress = taskProgress(gameData);
 
   return {
     role: roles[playerName],
     // A meeting has already happened this round, so roles are long since dealt.
     returningFromMeeting: !!gameData?.votingResult,
     roundStartedAt: gameData?.roundStartedAt,
+    // Traitors already know everyone's role; taskers never call this.
+    roleOf: (player) => roles[player],
     meetingEndedAt: gameData?.resultUntil,
     isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
@@ -48,9 +49,9 @@ export function deriveRoundState(gameData, playerName, uid) {
       const alreadySabotaged = Object.values(sabotages).some((s) => s.sabotagedPlayer === mate);
       return outstanding && !alreadySabotaged && !killList.includes(mate);
     }),
-    totalTasks,
-    totalCompletedTasks,
-    progress: totalTasks > 0 ? Math.round((totalCompletedTasks / totalTasks) * 100) : 0
+    totalTasks: progress.goal,
+    totalCompletedTasks: progress.done,
+    progress: progress.percent
   };
 }
 
@@ -74,6 +75,3 @@ export function everyoneFinishedTasks(gameData, playerName, nextCompleted) {
   });
 }
 
-export function winnerAfterKill(gameData, nextKillList) {
-  return decideOutcome(gameData?.roles || {}, nextKillList);
-}

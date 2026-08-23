@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  callMeeting, clearSabotage, endGame, endRound,
+  addTaskProgress, callMeeting, clearSabotage, endRound,
   recordKill, setCompletedTasks, startSabotage, undoKill
 } from '../game/mutations';
-import {
-  deriveRoundState, everyoneFinishedTasks, toggledTaskList, winnerAfterKill
-} from '../game/roundState';
+import { useSettleOutcome } from './useSettleOutcome';
+import { deriveRoundState, toggledTaskList } from '../game/roundState';
 import { currentUid } from '../firebase';
 import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
 import { useNow } from './useNow';
@@ -26,6 +25,7 @@ function justHappened(timestamp, now = Date.now()) {
 export function useCountdown(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  useSettleOutcome(gameCode, gameData);
 
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
@@ -76,11 +76,10 @@ export function useCountdown(gameCode) {
       if (round.tasksBlocked) return;
 
       const nextCompleted = toggledTaskList(round.completedTasks, task);
-      if (!(await setCompletedTasks(gameCode, playerName, nextCompleted))) return;
+      const delta = nextCompleted.length - round.completedTasks.length;
 
-      if (everyoneFinishedTasks(gameData, playerName, nextCompleted)) {
-        await endGame(gameCode, 'Crewmates', 'tasks');
-      }
+      if (!(await setCompletedTasks(gameCode, playerName, nextCompleted))) return;
+      await addTaskProgress(gameCode, delta);
     },
 
     toggleKill: async (crewmate) => {
@@ -90,10 +89,8 @@ export function useCountdown(gameCode) {
       }
       if (killCooldownLeft > 0) return;
 
-      if (!(await recordKill(gameCode, crewmate, playerName, round.killCooldown))) return;
-
-      const winner = winnerAfterKill(gameData, [...round.killList, crewmate]);
-      if (winner) await endGame(gameCode, winner, 'kills');
+      const victimRole = round.roleOf(crewmate);
+      await recordKill(gameCode, crewmate, playerName, round.killCooldown, victimRole);
     },
 
     callMeeting: () => callMeeting(gameCode, playerName),

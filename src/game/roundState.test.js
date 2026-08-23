@@ -1,10 +1,9 @@
-import {
-  deriveRoundState, everyoneFinishedTasks, toggledTaskList, winnerAfterKill
-} from './roundState';
+import { deriveRoundState, everyoneFinishedTasks, toggledTaskList } from './roundState';
 
 const HOST_UID = 'uid-tyler';
 const game = (over = {}) => ({
   creator: 'tyler',
+  players: ['tyler', 'sam', 'kai'],
   creatorUid: HOST_UID,
   roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' },
   assignedTasks: { sam: ['Dishes', 'Sweep'], kai: ['Dishes'] },
@@ -75,15 +74,15 @@ describe('deriveRoundState', () => {
     expect(s.eligibleCrewmates).toEqual(['kai']);
   });
 
-  test('counts crew-wide task progress', () => {
-    const s = deriveRoundState(game(), 'sam');
-    expect(s.totalTasks).toBe(3);
-    expect(s.totalCompletedTasks).toBe(1);
-    expect(s.progress).toBe(33);
+  test('reads crew-wide progress from the shared counter, not from role data', () => {
+    const s = deriveRoundState(game({ imposterCount: 1, tasksPerCrewmate: 2, tasksCompleted: 3 }), 'sam');
+    expect(s.totalTasks).toBe(4);
+    expect(s.totalCompletedTasks).toBe(3);
+    expect(s.progress).toBe(75);
   });
 
   test('reports zero progress rather than NaN before tasks exist', () => {
-    const s = deriveRoundState(game({ assignedTasks: {}, completedTasks: {} }), 'sam');
+    const s = deriveRoundState(game({ tasksPerCrewmate: 0 }), 'sam');
     expect(s.progress).toBe(0);
   });
 
@@ -119,11 +118,3 @@ describe('everyoneFinishedTasks', () => {
   });
 });
 
-describe('winnerAfterKill', () => {
-  test('imposters win once they equal the living crew', () => {
-    expect(winnerAfterKill(game(), ['sam'])).toBe('Imposters');
-  });
-  test('the round continues while crew outnumber them', () => {
-    expect(winnerAfterKill(game(), [])).toBeNull();
-  });
-});
