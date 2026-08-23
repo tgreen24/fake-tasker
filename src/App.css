@@ -1198,3 +1198,18 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .dead-card .avatar { width: 46px; height: 46px; font-size: .9rem; filter: grayscale(.7); opacity: .55; }
+
+/* Deliberately quiet: present on every screen, competing with nothing. */
+.leave-game {
+  align-self: center;
+  margin-top: 4px;
+  padding: 8px 14px;
+  background: none;
+  color: var(--text-faint);
+  font-size: .78rem;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.leave-game:hover:not(:disabled) { background: none; color: var(--text-dim); }
+.leave-game.confirming { color: var(--danger); }

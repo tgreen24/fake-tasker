@@ -6,6 +6,7 @@ import PlayerAvatar from './components/PlayerAvatar';
 import ScreenHeader from './components/ScreenHeader';
 import HowToPlay from './components/HowToPlay';
 import { roleNameLower, roleNamePlural } from './game/terminology';
+import LeaveGame from './components/LeaveGame';
 
 function GameLobby() {
   const { gameCode } = useParams();
@@ -56,6 +57,8 @@ function GameLobby() {
         {errorMessage && <p className="error-message">{errorMessage}</p>}
 
         <HowToPlay />
+
+        <LeaveGame />
 
         {isCreator && (
           <div className="creator-controls">

@@ -4,6 +4,7 @@ import { useGameOver } from './hooks/useGameOver';
 import ConnectionBanner from './components/ConnectionBanner';
 import RevealRoster from './components/RevealRoster';
 import { teamName } from './game/terminology';
+import LeaveGame from './components/LeaveGame';
 
 function GameOver() {
   const { gameCode } = useParams();
@@ -56,9 +57,7 @@ function GameOver() {
             </p>
           )}
 
-          {!isCreator && !hostReachable && (
-            <button className="submit-vote-button" onClick={actions.leaveGame}>Leave Game</button>
-          )}
+          <LeaveGame />
         </div>
       </div>
     </div>

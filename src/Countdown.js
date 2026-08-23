@@ -6,6 +6,7 @@ import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import { roleName, roleNamePlural } from './game/terminology';
+import LeaveGame from './components/LeaveGame';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -184,6 +185,8 @@ function Countdown() {
                 <button className="end-game-btn" onClick={actions.endRound}>End Game Round</button>
               )}
             </div>
+
+            <LeaveGame />
           </div>
         )}
       </div>
