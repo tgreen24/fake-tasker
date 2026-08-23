@@ -208,6 +208,42 @@ await check('claiming cannot rewrite the role it came with',
 await check('another player cannot take an owned seat',
   assertFails(updateDoc(doc(anotherPlayer, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief' })));
 
+// ── leaving your own seat, which the kick guard used to reject ──
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'games', CODE), {
+    players: ['tyler', 'sam', 'kai'], creator: 'tyler', creatorUid: HOST,
+    playerUids: { tyler: HOST, sam: PLAYER }, tasks: [], gameStarted: false
+  });
+});
+
+await check('a player can remove their own seat',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), {
+    players: ['tyler', 'kai'], leftBy: 'sam'
+  })));
+
+const reseedRoster = () => testEnv.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'games', CODE), {
+    players: ['tyler', 'sam', 'kai'], creator: 'tyler', creatorUid: HOST,
+    playerUids: { tyler: HOST, sam: PLAYER }, tasks: [], gameStarted: false
+  });
+});
+
+await reseedRoster();
+await check('a player cannot remove somebody else by claiming they left',
+  assertFails(updateDoc(doc(player, 'games', CODE), {
+    players: ['sam', 'kai'], leftBy: 'tyler'
+  })));
+
+await reseedRoster();
+
+await check('a seat with no account recorded can still be vacated',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE), {
+    players: ['tyler', 'sam'], leftBy: 'kai'
+  })));
+
+await check('leaving cannot be used to empty the roster',
+  assertFails(updateDoc(doc(player, 'games', CODE), { players: [], leftBy: 'sam' })));
+
 await testEnv.cleanup();
 
 const failed = results.filter(([, ok]) => !ok);

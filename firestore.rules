@@ -49,6 +49,20 @@ service cloud.firestore {
       return request.resource.data.players.size() < resource.data.players.size();
     }
 
+    // Leaving is removing yourself, which rules cannot tell from kicking
+    // unless the write says which seat went. playerUids maps that name to an
+    // account. A seat with no account recorded is allowed through, because
+    // being unable to leave is worse than an unverifiable departure.
+    function leavesOwnSeat() {
+      let leaver = request.resource.data.get('leftBy', '');
+      let uids = resource.data.get('playerUids', {});
+      return leaver != ''
+        && request.resource.data.players.size() == resource.data.players.size() - 1
+        && leaver in resource.data.players
+        && !(leaver in request.resource.data.players)
+        && (!(leaver in uids) || uids[leaver] == request.auth.uid);
+    }
+
     match /games/{gameCode} {
       // A player needs to fetch a game by code to join it, but nobody may
       // list the collection and harvest every live game's roles.
@@ -67,7 +81,7 @@ service cloud.firestore {
         && boundedGame(request.resource.data)
         && request.resource.data.creator == resource.data.creator
         && request.resource.data.get('creatorUid', '') == resource.data.get('creatorUid', '')
-        && (isHost() || (!touchesHostOnlyFields() && !removesPlayers()));
+        && (isHost() || (!touchesHostOnlyFields() && (!removesPlayers() || leavesOwnSeat())));
 
       allow delete: if signedIn() && isHost();
 

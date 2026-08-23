@@ -73,8 +73,11 @@ export async function deleteGame(gameCode, players = []) {
 // the round can never be won by tasks.
 export function leaveGame(gameCode, playerName, { inRound = false, role, tasksOutstanding = 0 } = {}) {
   if (!inRound) {
+    // leftBy names the departing seat so the rules can tell leaving from
+    // kicking; without it the write reads as removing somebody else.
     return updateGame(gameCode, {
       players: arrayRemove(playerName),
+      leftBy: playerName,
       [`playerUids.${playerName}`]: deleteField()
     });
   }
