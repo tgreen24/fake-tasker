@@ -74,7 +74,7 @@ describe('resolveVote', () => {
 
   test('names the imposter when one is ejected', () => {
     const data = meeting({ votes: { tyler: 'tyler', sam: 'tyler', kai: 'skip' } });
-    expect(resolveVote(data).message).toMatch(/was an Imposter/);
+    expect(resolveVote(data).message).toMatch(/was a Traitor/);
   });
 });
 

@@ -2,6 +2,8 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameOver } from './hooks/useGameOver';
 import ConnectionBanner from './components/ConnectionBanner';
+import RevealRoster from './components/RevealRoster';
+import { teamName } from './game/terminology';
 
 function GameOver() {
   const { gameCode } = useParams();
@@ -11,7 +13,7 @@ function GameOver() {
     return <div className="gameover-screen"><ConnectionBanner connected={connected} />Loading…</div>;
   }
 
-  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage } = state;
+  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason } = state;
 
   return (
     <div className="gameover-screen">
@@ -29,10 +31,14 @@ function GameOver() {
 
           <p className="gameover-eyebrow">Game Over</p>
           <h1 className={`winning-team reveal-pop ${winner === 'Imposters' ? 'imposters-win' : 'crewmates-win'}`}>
-            {winner} Win
+            {teamName(winner)} Win
           </h1>
 
+          {winReason && <p className="win-reason reveal-fade">{winReason}</p>}
+
           <h2 className="player-result reveal-fade">{role ? (playerWon ? 'You Win!' : 'You Lose!') : ''}</h2>
+
+          <RevealRoster roster={roster} winner={winner} />
 
           {errorMessage && <p className="error-message">{errorMessage}</p>}
 

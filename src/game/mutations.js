@@ -80,7 +80,8 @@ export const startRound = (gameCode, { roles, assignedTasks, imposterHistory, co
     resultUntil: deleteField(),
     voteDeadline: deleteField(),
     ejected: deleteField(),
-    winner: deleteField()
+    winner: deleteField(),
+    winReason: deleteField()
   });
 
 export const endRound = (gameCode) => updateGame(gameCode, {
@@ -109,13 +110,14 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   votingResult: deleteField(),
   resultUntil: deleteField(),
   ejected: deleteField(),
-  winner: deleteField()
+  winner: deleteField(),
+  winReason: deleteField()
 });
 
 // ── round play ─────────────────────────────────────────────
 
-export const endGame = (gameCode, winner) =>
-  updateGame(gameCode, { gameEnded: true, winner });
+export const endGame = (gameCode, winner, winReason) =>
+  updateGame(gameCode, { gameEnded: true, winner, winReason });
 
 // Kill and cooldown land in one write, so a cooldown cannot be lost by the
 // second write failing after the first succeeded.
@@ -188,6 +190,7 @@ export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, 
     await updateGame(gameCode, {
       gameEnded: true,
       winner,
+      winReason: 'kills',
       meetingCalled: false,
       voteDeadline: deleteField(),
       resultUntil: deleteField()
@@ -221,7 +224,13 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
         sabotageCooldowns: resumeCooldowns(data.sabotageCooldowns),
         voteDeadline: deleteField(),
         ...(votedOut ? { killList: nextKillList } : {}),
-        ...(winner ? { gameEnded: true, winner } : {})
+        ...(winner ? {
+          gameEnded: true,
+          winner,
+          winReason: winner === 'Crewmates'
+            ? 'imposters-ejected'
+            : votedOut ? 'ejection' : 'outnumbered'
+        } : {})
       });
     });
   } catch (error) {

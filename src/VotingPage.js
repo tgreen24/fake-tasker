@@ -7,6 +7,7 @@ import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import TypedVerdict from './components/TypedVerdict';
+import { roleName, roleNameLower } from './game/terminology';
 
 function DeadPlayersList({ deadPlayers }) {
   if (deadPlayers.length === 0) return null;
@@ -68,7 +69,7 @@ function VotingPage() {
                   <TypedVerdict
                     text={verdictText}
                     revealed={displayedVerdict.length}
-                    highlightWord="Imposter"
+                    highlightWord={roleName('Imposter')}
                     highlight={ejectedWasImposter}
                   />
                   {!verdictComplete && <span className="caret" aria-hidden="true" />}
@@ -129,10 +130,10 @@ function VotingPage() {
               <Selectable
                 as="div"
                 className="voting-card"
-                label="Kill a crewmate"
+                label={`Kill a ${roleNameLower('Crewmate')}`}
                 onSelect={actions.openKillDialog}
               >
-                <span>Kill Crewmate</span>
+                <span>Kill {roleName('Crewmate')}</span>
               </Selectable>
             )}
 

@@ -79,7 +79,7 @@ export function useCountdown(gameCode) {
       if (!(await setCompletedTasks(gameCode, playerName, nextCompleted))) return;
 
       if (everyoneFinishedTasks(gameData, playerName, nextCompleted)) {
-        await endGame(gameCode, 'Crewmates');
+        await endGame(gameCode, 'Crewmates', 'tasks');
       }
     },
 
@@ -93,7 +93,7 @@ export function useCountdown(gameCode) {
       if (!(await recordKill(gameCode, crewmate, playerName, round.killCooldown))) return;
 
       const winner = winnerAfterKill(gameData, [...round.killList, crewmate]);
-      if (winner) await endGame(gameCode, winner);
+      if (winner) await endGame(gameCode, winner, 'kills');
     },
 
     callMeeting: () => callMeeting(gameCode, playerName),

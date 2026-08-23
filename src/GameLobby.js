@@ -4,6 +4,8 @@ import { useLobby } from './hooks/useLobby';
 import ConnectionBanner from './components/ConnectionBanner';
 import PlayerAvatar from './components/PlayerAvatar';
 import ScreenHeader from './components/ScreenHeader';
+import HowToPlay from './components/HowToPlay';
+import { roleNameLower, roleNamePlural } from './game/terminology';
 
 function GameLobby() {
   const { gameCode } = useParams();
@@ -53,6 +55,8 @@ function GameLobby() {
 
         {errorMessage && <p className="error-message">{errorMessage}</p>}
 
+        <HowToPlay />
+
         {isCreator && (
           <div className="creator-controls">
             <div className="task-section">
@@ -93,7 +97,7 @@ function GameLobby() {
 
             {players.length > 3 ? (
               <div className="imposter-select">
-                <label>Number of Imposters:</label>
+                <label>Number of {roleNamePlural('Imposter')}:</label>
                 <select
                   value={imposterCount}
                   onChange={(e) => actions.updateSetting('imposterCount', Number(e.target.value))}
@@ -104,7 +108,7 @@ function GameLobby() {
                 </select>
               </div>
             ) : (
-              <p>There will be 1 imposter.</p>
+              <p>There will be 1 {roleNameLower('Imposter')}.</p>
             )}
 
             <div className="kill-cooldown-selection">
@@ -120,7 +124,7 @@ function GameLobby() {
             </div>
 
             <div className="task-count-selection">
-              <label>Number of Tasks per Crewmate:</label>
+              <label>Tasks each:</label>
               <select
                 value={tasksPerCrewmate}
                 onChange={(e) => actions.updateSetting('tasksPerCrewmate', Number(e.target.value))}

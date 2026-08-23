@@ -5,6 +5,7 @@ import ConnectionBanner from './components/ConnectionBanner';
 import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
+import { roleName, roleNamePlural } from './game/terminology';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -51,7 +52,11 @@ function Countdown() {
             <h2
               className={`role-announcement role-reveal ${isDead ? role : blended ? 'Crewmate' : role || ''}`}
             >
-              {isDead ? `You are a Dead ${role}` : role === 'Imposter' ? 'You are the Imposter!' : 'You are a Crewmate!'}
+              {isDead
+                ? `You are a Dead ${roleName(role)}`
+                : role === 'Imposter'
+                ? `You are the ${roleName('Imposter')}!`
+                : `You are a ${roleName('Crewmate')}!`}
             </h2>
 
             {role === 'Crewmate' && !tasksBlocked && (
@@ -110,7 +115,7 @@ function Countdown() {
                 )}
                 {fellowImposters.length > 0 && (
                   <div className="fellow-imposters">
-                    <p>Other Imposters: {fellowImposters.join(', ')}</p>
+                    <p>Other {roleNamePlural('Imposter')}: {fellowImposters.join(', ')}</p>
                   </div>
                 )}
               </div>

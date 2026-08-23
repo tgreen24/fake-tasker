@@ -5,6 +5,7 @@ import { VOTE_DURATION_MS, shouldResolveMeeting } from '../voteLogic';
 import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
+import { roleName } from '../game/terminology';
 
 const TYPEWRITER_MS = 40;
 const VERDICT_DELAY_MS = 700;
@@ -49,7 +50,9 @@ export function useMeeting(gameCode) {
   const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid()), [gameData, playerName]);
   const displayedResult = useTypewriter(meeting.votingResult);
   const verdictText = meeting.ejected
-    ? (meeting.ejectedWasImposter ? 'They were the Imposter' : 'They were not the Imposter')
+    ? (meeting.ejectedWasImposter
+        ? `They were the ${roleName('Imposter')}`
+        : `They were not the ${roleName('Imposter')}`)
     : '';
   const displayedVerdict = useTypewriter(verdictText, VERDICT_DELAY_MS);
 

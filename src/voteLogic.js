@@ -1,3 +1,4 @@
+import { TRAITOR } from './game/terminology';
 export const VOTE_DURATION_MS = 180000;
 
 export function alivePlayersOf(gameData) {
@@ -49,8 +50,8 @@ export function resolveVote(gameData) {
   const votedOut = leaders[0];
   return {
     message: roles[votedOut] === 'Imposter'
-      ? `${votedOut} was an Imposter and was voted out!`
-      : `${votedOut} was not an Imposter and was voted out.`,
+      ? `${votedOut} was a ${TRAITOR} and was voted out!`
+      : `${votedOut} was not a ${TRAITOR} and was voted out.`,
     votedOut
   };
 }
