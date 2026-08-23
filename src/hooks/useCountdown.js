@@ -10,6 +10,7 @@ import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '
 import { useNow } from './useNow';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
+import { usePrivateRole } from './usePrivateRole';
 
 const OPENING_COUNTDOWN_SECONDS = 3;
 const REVEAL_HOLD_MS = 3800;
@@ -25,13 +26,14 @@ function justHappened(timestamp, now = Date.now()) {
 export function useCountdown(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
 
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
   const [blended, setBlended] = useState(false);
 
-  const round = useMemo(() => deriveRoundState(gameData, playerName, currentUid()), [gameData, playerName]);
+  const round = useMemo(() => deriveRoundState(gameData, playerName, currentUid(), privateData), [gameData, playerName, privateData]);
 
   const introKind = !gameData
     ? null
@@ -106,7 +108,7 @@ export function useCountdown(gameCode) {
     },
 
     clearMySabotage: () => clearSabotage(gameCode, playerName)
-  }), [gameCode, playerName, gameData, round, killCooldownLeft, sabotageCooldownLeft]);
+  }), [gameCode, playerName, round, killCooldownLeft, sabotageCooldownLeft]);
 
   return {
     state: {
@@ -120,7 +122,7 @@ export function useCountdown(gameCode) {
       blended
     },
     actions,
-    loading,
+    loading: loading || roleLoading,
     connected
   };
 }

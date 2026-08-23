@@ -36,7 +36,7 @@ service cloud.firestore {
       return [
         'roles', 'assignedTasks', 'imposterHistory',
         'imposterCount', 'tasksPerCrewmate', 'killCooldown',
-        'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid'
+        'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid', 'roundStartedAt'
       ];
     }
 
@@ -70,6 +70,44 @@ service cloud.firestore {
         && (isHost() || (!touchesHostOnlyFields() && !removesPlayers()));
 
       allow delete: if signedIn() && isHost();
+
+      // A player's role and task list. Readable only by the account holding
+      // that seat, which is what stops every browser receiving the traitor
+      // list. The host writes them all when dealing a round; after that only
+      // the owner touches their own, to record task progress.
+      match /players/{playerName} {
+        function game() {
+          return get(/databases/$(database)/documents/games/$(gameCode)).data;
+        }
+        function isGameHost() {
+          return request.auth.uid == game().get('creatorUid', '');
+        }
+        function ownsSeat() {
+          return resource != null && resource.data.get('uid', null) == request.auth.uid;
+        }
+        // The host stamps each seat with the account that announced it. If that
+        // announcement had not landed when the round was dealt the seat is
+        // unowned, and its player could otherwise never read or write their own
+        // role. An unowned seat is claimable, once, without altering the role.
+        // The field is written as null when the account was not yet known, so
+        // an absent value and a null one both mean unclaimed.
+        function seatIsUnclaimed() {
+          return resource != null && resource.data.get('uid', null) == null;
+        }
+        function claimsSeat() {
+          return seatIsUnclaimed()
+            && request.resource.data.get('uid', null) == request.auth.uid
+            && request.resource.data.role == resource.data.role
+            && request.resource.data.tasks == resource.data.tasks;
+        }
+
+        allow get: if signedIn() && (ownsSeat() || seatIsUnclaimed());
+        allow list: if false;
+
+        allow create: if signedIn() && isGameHost();
+        allow update: if signedIn() && (ownsSeat() || isGameHost() || claimsSeat());
+        allow delete: if signedIn() && isGameHost();
+      }
     }
 
     match /{document=**} {

@@ -6,11 +6,15 @@ import { RESULT_DISPLAY_MS } from '../gameRoute';
 
 const NOW = 1_000_000;
 const HOST_UID = 'uid-tyler';
+const ROLES = { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' };
+const traitorDoc = { role: 'Imposter', roleMap: ROLES };
+const taskerDoc = { role: 'Crewmate' };
+
 const meeting = (over = {}) => ({
   players: ['tyler', 'sam', 'kai'],
   creator: 'tyler',
   creatorUid: HOST_UID,
-  roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' },
+  revealed: {},
   killList: [],
   votes: {},
   meetingCalled: true,
@@ -20,50 +24,51 @@ const meeting = (over = {}) => ({
 
 describe('deriveMeetingState', () => {
   test('counts only living voters', () => {
-    const s = deriveMeetingState(meeting({ killList: ['kai'], votes: { tyler: 'skip', kai: 'sam' } }), 'tyler');
+    const s = deriveMeetingState(meeting({ killList: ['kai'], votes: { tyler: 'skip', kai: 'sam' } }), 'tyler', undefined, traitorDoc);
     expect(s.alivePlayers).toEqual(['tyler', 'sam']);
     expect(s.votesCast).toBe(1);
   });
 
   test('knows whether the viewer is alive and hosting', () => {
-    const s = deriveMeetingState(meeting({ killList: ['sam'] }), 'sam', 'uid-sam');
+    const s = deriveMeetingState(meeting({ killList: ['sam'] }), 'sam', 'uid-sam', taskerDoc);
     expect(s.isAlive).toBe(false);
     expect(s.isCreator).toBe(false);
     expect(deriveMeetingState(meeting(), 'tyler', HOST_UID).isCreator).toBe(true);
-    expect(deriveMeetingState(meeting(), 'tyler', 'uid-sam').isCreator).toBe(false);
+    expect(deriveMeetingState(meeting(), 'tyler', 'uid-sam', traitorDoc).isCreator).toBe(false);
   });
 
   test('surfaces the viewer own vote once cast', () => {
-    expect(deriveMeetingState(meeting({ votes: { sam: 'tyler' } }), 'sam').myVote).toBe('tyler');
-    expect(deriveMeetingState(meeting(), 'sam').myVote).toBeUndefined();
+    expect(deriveMeetingState(meeting({ votes: { sam: 'tyler' } }), 'sam', undefined, taskerDoc).myVote).toBe('tyler');
+    expect(deriveMeetingState(meeting(), 'sam', undefined, taskerDoc).myVote).toBeUndefined();
   });
 
   test('is not ended while the meeting runs', () => {
-    expect(deriveMeetingState(meeting(), 'sam').votingEnded).toBe(false);
+    expect(deriveMeetingState(meeting(), 'sam', undefined, taskerDoc).votingEnded).toBe(false);
   });
 
   test('is ended inside the result window', () => {
     const data = meeting({ meetingCalled: false, votingResult: 'skipped', resultUntil: Date.now() + 2000 });
-    expect(deriveMeetingState(data, 'sam').votingEnded).toBe(true);
+    expect(deriveMeetingState(data, 'sam', undefined, taskerDoc).votingEnded).toBe(true);
   });
 
   test('stays ended after the window lapses, so the screen does not flash back', () => {
     const data = meeting({ meetingCalled: false, votingResult: 'skipped', resultUntil: Date.now() - 1 });
-    expect(deriveMeetingState(data, 'sam').votingEnded).toBe(true);
+    expect(deriveMeetingState(data, 'sam', undefined, taskerDoc).votingEnded).toBe(true);
   });
 
   test('offers an imposter only living non-imposters, never themselves', () => {
-    const s = deriveMeetingState(meeting({ killList: ['kai'] }), 'tyler');
+    const s = deriveMeetingState(meeting({ killList: ['kai'] }), 'tyler', undefined, traitorDoc);
     expect(s.killableBy('tyler')).toEqual(['sam']);
   });
 
   test('never offers a fellow imposter as a kill target', () => {
-    const data = meeting({ roles: { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate' }, players: ['tyler', 'rae', 'sam'] });
-    expect(deriveMeetingState(data, 'tyler').killableBy('tyler')).toEqual(['sam']);
+    const data = meeting({ players: ['tyler', 'rae', 'sam'] });
+    const twoTraitors = { role: 'Imposter', roleMap: { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate' } };
+    expect(deriveMeetingState(data, 'tyler', undefined, twoTraitors).killableBy('tyler')).toEqual(['sam']);
   });
 
   test('survives a missing document', () => {
-    const s = deriveMeetingState(null, 'sam');
+    const s = deriveMeetingState(null, 'sam', undefined, taskerDoc);
     expect(s.alivePlayers).toEqual([]);
     expect(s.votesCast).toBe(0);
     expect(s.meetingCalled).toBe(false);

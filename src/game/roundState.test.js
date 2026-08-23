@@ -1,13 +1,23 @@
-import { deriveRoundState, everyoneFinishedTasks, toggledTaskList } from './roundState';
+import { deriveRoundState, toggledTaskList } from './roundState';
 
 const HOST_UID = 'uid-tyler';
+const ROLES = { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' };
+
+// A traitor's private document carries the whole map; a tasker's carries only
+// their own role and list. Nobody can read anybody else's.
+const traitorDoc = (over = {}) => ({ role: 'Imposter', roleMap: ROLES, tasks: [], completedTasks: [], ...over });
+const taskerDoc = (over = {}) => ({
+  role: 'Crewmate', tasks: ['Dishes', 'Sweep'], completedTasks: ['Dishes'], ...over
+});
+
+// The shared document, which no longer carries a single role.
 const game = (over = {}) => ({
   creator: 'tyler',
-  players: ['tyler', 'sam', 'kai'],
   creatorUid: HOST_UID,
-  roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' },
-  assignedTasks: { sam: ['Dishes', 'Sweep'], kai: ['Dishes'] },
-  completedTasks: { sam: ['Dishes'], kai: [] },
+  players: ['tyler', 'sam', 'kai'],
+  imposterCount: 1,
+  tasksPerCrewmate: 2,
+  tasksCompleted: 0,
   killList: [],
   sabotages: {},
   killCooldown: 20,
@@ -15,106 +25,98 @@ const game = (over = {}) => ({
 });
 
 describe('deriveRoundState', () => {
-  test('reads the player their own role and tasks', () => {
-    const s = deriveRoundState(game(), 'sam');
+  test('reads a player their own role and tasks from their own document', () => {
+    const s = deriveRoundState(game(), 'sam', 'uid-sam', taskerDoc());
     expect(s.role).toBe('Crewmate');
     expect(s.tasks).toEqual(['Dishes', 'Sweep']);
     expect(s.completedTasks).toEqual(['Dishes']);
   });
 
-  test('marks a killed player as dead', () => {
-    expect(deriveRoundState(game({ killList: ['sam'] }), 'sam').isDead).toBe(true);
+  test('a tasker learns nothing about anyone else', () => {
+    const s = deriveRoundState(game(), 'sam', 'uid-sam', taskerDoc());
+    expect(s.crewmates).toEqual([]);
+    expect(s.fellowImposters).toEqual([]);
+    expect(s.roleOf('tyler')).toBeUndefined();
   });
 
-  test('identifies the host by account, not by display name', () => {
-    expect(deriveRoundState(game(), 'tyler', HOST_UID).isCreator).toBe(true);
-    expect(deriveRoundState(game(), 'sam', 'uid-sam').isCreator).toBe(false);
-    expect(deriveRoundState(game(), 'tyler', 'uid-sam').isCreator).toBe(false);
+  test('a traitor sees the room, because that is what the target list is', () => {
+    const s = deriveRoundState(game(), 'tyler', HOST_UID, traitorDoc());
+    expect(s.crewmates).toEqual(['kai', 'sam']);
+    expect(s.roleOf('sam')).toBe('Crewmate');
   });
 
-  test('hides the acting imposter from their own fellow list', () => {
-    const s = deriveRoundState(game({ roles: { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate' } }), 'tyler');
+  test('hides the acting traitor from their own fellow list', () => {
+    const roleMap = { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate' };
+    const s = deriveRoundState(game(), 'tyler', HOST_UID, traitorDoc({ roleMap }));
     expect(s.fellowImposters).toEqual(['rae']);
-    expect(s.crewmates).toEqual(['sam']);
   });
 
-  test('blocks tasks for a sabotaged crewmate and names the imposter', () => {
-    const s = deriveRoundState(game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } }), 'sam');
+  test('marks a killed player as dead', () => {
+    expect(deriveRoundState(game({ killList: ['sam'] }), 'sam', 'uid-sam', taskerDoc()).isDead).toBe(true);
+  });
+
+  test('identifies the host by account, not display name', () => {
+    expect(deriveRoundState(game(), 'tyler', HOST_UID, traitorDoc()).isCreator).toBe(true);
+    expect(deriveRoundState(game(), 'tyler', 'uid-sam', traitorDoc()).isCreator).toBe(false);
+  });
+
+  test('blocks a sabotaged tasker and names who to find', () => {
+    const g = game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } });
+    const s = deriveRoundState(g, 'sam', 'uid-sam', taskerDoc());
     expect(s.tasksBlocked).toBe(true);
     expect(s.sabotagingImposter).toBe('tyler');
   });
 
-  test('does not block a crewmate who is not the target', () => {
-    const s = deriveRoundState(game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } }), 'kai');
-    expect(s.tasksBlocked).toBe(false);
+  test('does not block a tasker who is not the target', () => {
+    const g = game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } });
+    expect(deriveRoundState(g, 'kai', 'uid-kai', taskerDoc()).tasksBlocked).toBe(false);
   });
 
-  test('tells the sabotaging imposter who they are hiding from', () => {
-    const s = deriveRoundState(game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } }), 'tyler');
+  test('tells the sabotaging traitor who they are hiding from', () => {
+    const g = game({ sabotages: { tyler: { sabotagedPlayer: 'sam' } } });
+    const s = deriveRoundState(g, 'tyler', HOST_UID, traitorDoc());
     expect(s.sabotageActive).toBe(true);
     expect(s.sabotagedPlayer).toBe('sam');
     expect(s.tasksBlocked).toBe(false);
   });
 
-  test('offers only crewmates who are alive, unsabotaged and still have tasks', () => {
-    const s = deriveRoundState(game({
-      completedTasks: { sam: ['Dishes'], kai: ['Dishes'] },
-      sabotages: {}
-    }), 'tyler');
-    expect(s.eligibleCrewmates).toEqual(['sam']);
+  test('offers any living tasker who is not already sabotaged', () => {
+    const s = deriveRoundState(game(), 'tyler', HOST_UID, traitorDoc());
+    expect(s.eligibleCrewmates).toEqual(['kai', 'sam']);
   });
 
-  test('excludes the dead from sabotage targets', () => {
-    const s = deriveRoundState(game({ killList: ['sam'] }), 'tyler');
-    expect(s.eligibleCrewmates).toEqual(['kai']);
+  test('excludes the dead and the already sabotaged', () => {
+    const g = game({ killList: ['sam'], sabotages: { rae: { sabotagedPlayer: 'kai' } } });
+    expect(deriveRoundState(g, 'tyler', HOST_UID, traitorDoc()).eligibleCrewmates).toEqual([]);
   });
 
-  test('excludes someone already being sabotaged', () => {
-    const s = deriveRoundState(game({ sabotages: { rae: { sabotagedPlayer: 'sam' } } }), 'tyler');
-    expect(s.eligibleCrewmates).toEqual(['kai']);
-  });
-
-  test('reads crew-wide progress from the shared counter, not from role data', () => {
-    const s = deriveRoundState(game({ imposterCount: 1, tasksPerCrewmate: 2, tasksCompleted: 3 }), 'sam');
+  test('reads crew-wide progress from the shared counter', () => {
+    const s = deriveRoundState(game({ tasksCompleted: 3 }), 'sam', 'uid-sam', taskerDoc());
     expect(s.totalTasks).toBe(4);
     expect(s.totalCompletedTasks).toBe(3);
     expect(s.progress).toBe(75);
   });
 
-  test('reports zero progress rather than NaN before tasks exist', () => {
-    const s = deriveRoundState(game({ tasksPerCrewmate: 0 }), 'sam');
+  test('reports zero rather than NaN before a round has tasks', () => {
+    const s = deriveRoundState(game({ tasksPerCrewmate: 0 }), 'sam', 'uid-sam', taskerDoc());
     expect(s.progress).toBe(0);
   });
 
-  test('survives a missing game document', () => {
-    const s = deriveRoundState(null, 'sam');
+  test('survives having no private document yet', () => {
+    const s = deriveRoundState(game(), 'sam', 'uid-sam', null);
     expect(s.role).toBeUndefined();
+    expect(s.tasks).toEqual([]);
+    expect(s.crewmates).toEqual([]);
+  });
+
+  test('survives no game document at all', () => {
+    const s = deriveRoundState(null, 'sam', 'uid-sam', null);
     expect(s.tasks).toEqual([]);
     expect(s.progress).toBe(0);
   });
 });
 
 describe('toggledTaskList', () => {
-  test('adds a task that is not done', () => {
-    expect(toggledTaskList(['a'], 'b')).toEqual(['a', 'b']);
-  });
-  test('removes one that is', () => {
-    expect(toggledTaskList(['a', 'b'], 'a')).toEqual(['b']);
-  });
+  test('adds a task that is not done', () => expect(toggledTaskList(['a'], 'b')).toEqual(['a', 'b']));
+  test('removes one that is', () => expect(toggledTaskList(['a', 'b'], 'a')).toEqual(['b']));
 });
-
-describe('everyoneFinishedTasks', () => {
-  test('is false while anyone has work left', () => {
-    expect(everyoneFinishedTasks(game(), 'sam', ['Dishes'])).toBe(false);
-  });
-
-  test('counts the caller pending write, which the snapshot has not seen yet', () => {
-    const nearlyDone = game({ completedTasks: { sam: ['Dishes'], kai: ['Dishes'] } });
-    expect(everyoneFinishedTasks(nearlyDone, 'sam', ['Dishes', 'Sweep'])).toBe(true);
-  });
-
-  test('is false with no crewmates at all', () => {
-    expect(everyoneFinishedTasks(game({ roles: { tyler: 'Imposter' } }), 'tyler', [])).toBe(false);
-  });
-});
-

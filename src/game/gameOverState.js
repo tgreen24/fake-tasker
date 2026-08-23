@@ -1,47 +1,7 @@
 import { hasReachableHost, isHost } from './host';
 import { assignColors } from './playerColor';
+import { decideOutcomeFromCounts, taskProgress } from './outcome';
 import { roleNameLower, roleNameLowerPlural } from './terminology';
-
-export function decideWinner(gameData) {
-  if (gameData?.winner) return gameData.winner;
-
-  const roles = gameData?.roles || {};
-  const killList = gameData?.killList || [];
-  const crewmates = Object.keys(roles).filter((player) => roles[player] === 'Crewmate');
-  const imposters = Object.keys(roles).filter((player) => roles[player] === 'Imposter');
-
-  const allTasksDone = crewmates.length > 0 && crewmates.every((crewmate) => {
-    const assigned = gameData?.assignedTasks?.[crewmate] || [];
-    const done = gameData?.completedTasks?.[crewmate] || [];
-    return done.length >= assigned.length;
-  });
-  const allImpostersOut = imposters.length > 0 && imposters.every((imposter) => killList.includes(imposter));
-
-  return allTasksDone || allImpostersOut ? 'Crewmates' : 'Imposters';
-}
-
-// Everyone who was actually dealt a role this round, in roster order so the
-// colours match what people saw all game.
-export function revealRoster(gameData) {
-  const players = gameData?.players || [];
-  const roles = gameData?.roles || {};
-  const killList = gameData?.killList || [];
-  const colors = assignColors(players);
-
-  const dealt = players
-    .filter((player) => roles[player])
-    .map((player) => ({
-      name: player,
-      role: roles[player],
-      color: colors[player],
-      survived: !killList.includes(player)
-    }));
-
-  return {
-    imposters: dealt.filter((entry) => entry.role === 'Imposter'),
-    crewmates: dealt.filter((entry) => entry.role === 'Crewmate')
-  };
-}
 
 const WIN_REASONS = {
   tasks: 'All tasks completed',
@@ -56,13 +16,44 @@ export function winReasonText(gameData) {
   return WIN_REASONS[gameData?.winReason] || '';
 }
 
-export function deriveGameOverState(gameData, playerName, uid) {
+// Whoever settled the round recorded the winner. Falling back to the public
+// counts covers a document read before that write landed.
+export function decideWinner(gameData) {
+  return gameData?.winner || decideOutcomeFromCounts(gameData) || '';
+}
+
+// Every player publishes their own role once the round is over, so this fills
+// in as those writes land rather than being read from one shared map.
+export function revealRoster(gameData) {
+  const players = gameData?.players || [];
+  const revealed = gameData?.revealed || {};
+  const killList = gameData?.killList || [];
+  const colors = assignColors(players);
+
+  const dealt = players
+    .filter((player) => revealed[player])
+    .map((player) => ({
+      name: player,
+      role: revealed[player],
+      color: colors[player],
+      survived: !killList.includes(player)
+    }));
+
+  return {
+    imposters: dealt.filter((entry) => entry.role === 'Imposter'),
+    crewmates: dealt.filter((entry) => entry.role === 'Crewmate'),
+    pending: players.length - dealt.length
+  };
+}
+
+export function deriveGameOverState(gameData, playerName, uid, privateData) {
   const winner = decideWinner(gameData);
-  const role = gameData?.roles?.[playerName];
+  const role = privateData?.role || (gameData?.revealed || {})[playerName];
 
   return {
     roster: revealRoster(gameData),
     winReason: winReasonText(gameData),
+    progress: taskProgress(gameData),
     winner,
     role,
     isCreator: isHost(gameData, uid),

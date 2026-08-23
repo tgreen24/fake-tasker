@@ -46,6 +46,7 @@ const seed = async (data = baseGame) => {
 const anon = testEnv.unauthenticatedContext().firestore();
 const host = testEnv.authenticatedContext(HOST).firestore();
 const player = testEnv.authenticatedContext(PLAYER).firestore();
+const anotherPlayer = testEnv.authenticatedContext('uid-thief').firestore();
 
 // ── unauthenticated access, the original exposure ──
 await seed();
@@ -136,6 +137,76 @@ await check('exceeding the player cap is denied', assertFails(updateDoc(doc(host
 await check('exceeding the task cap is denied', assertFails(updateDoc(doc(host, 'games', CODE), {
   tasks: Array.from({ length: 61 }, (_, i) => `t${i}`)
 })));
+
+// ── private role documents: the point of the whole phase ──
+const HOST_SEAT = 'tyler';
+const PLAYER_SEAT = 'sam';
+
+await env2Seed();
+
+async function env2Seed() {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, 'games', CODE), {
+      players: ['tyler', 'sam'], creator: 'tyler', creatorUid: HOST,
+      playerUids: { tyler: HOST, sam: PLAYER }, gameStarted: true
+    });
+    await setDoc(doc(db, 'games', CODE, 'players', HOST_SEAT), {
+      uid: HOST, role: 'Imposter', tasks: [], roleMap: { tyler: 'Imposter', sam: 'Crewmate' }
+    });
+    await setDoc(doc(db, 'games', CODE, 'players', PLAYER_SEAT), {
+      uid: PLAYER, role: 'Crewmate', tasks: ['Dishes'], completedTasks: []
+    });
+  });
+}
+
+await check('you can read your own role',
+  assertSucceeds(getDoc(doc(player, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('you CANNOT read another player role',
+  assertFails(getDoc(doc(player, 'games', CODE, 'players', HOST_SEAT))));
+await check('the host cannot read a player role either',
+  assertFails(getDoc(doc(host, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('signed-out cannot read any role',
+  assertFails(getDoc(doc(anon, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('nobody can list the roles collection',
+  assertFails(getDocs(collection(player, 'games', CODE, 'players'))));
+
+await check('you can record your own task progress',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE, 'players', PLAYER_SEAT), { completedTasks: ['Dishes'] })));
+await check('you cannot rewrite your own role',
+  assertFails(updateDoc(doc(anon, 'games', CODE, 'players', PLAYER_SEAT), { role: 'Imposter' })));
+await check('you cannot touch another player document',
+  assertFails(updateDoc(doc(player, 'games', CODE, 'players', HOST_SEAT), { role: 'Crewmate' })));
+
+await check('the host can deal a round',
+  assertSucceeds(setDoc(doc(host, 'games', CODE, 'players', 'kai'), { uid: 'uid-kai', role: 'Crewmate', tasks: [] })));
+await check('a player cannot deal themselves a role',
+  assertFails(setDoc(doc(player, 'games', CODE, 'players', 'rae'), { uid: PLAYER, role: 'Imposter', tasks: [] })));
+
+// ── the deal-time race: a seat dealt before its account was announced ──
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'games', CODE, 'players', 'rae'), {
+    uid: null, role: 'Crewmate', tasks: ['Dishes'], completedTasks: []
+  });
+  await setDoc(doc(db, 'games', CODE, 'players', 'dal'), {
+    uid: null, role: 'Crewmate', tasks: [], completedTasks: []
+  });
+});
+
+await check('an unowned seat can be read, so its player is not locked out',
+  assertSucceeds(getDoc(doc(player, 'games', CODE, 'players', 'rae'))));
+
+await check('and claimed by whoever holds it',
+  assertSucceeds(updateDoc(doc(player, 'games', CODE, 'players', 'rae'), { uid: PLAYER })));
+
+await check('claiming cannot rewrite the role it came with',
+  assertFails(updateDoc(doc(player, 'games', CODE, 'players', 'dal'), { uid: PLAYER, role: 'Imposter' })));
+
+// The host writes every seat when dealing a round, so they can reach them all.
+// What must not happen is another player taking one.
+await check('another player cannot take an owned seat',
+  assertFails(updateDoc(doc(anotherPlayer, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief' })));
 
 await testEnv.cleanup();
 

@@ -50,21 +50,21 @@ export function useLobby(gameCode) {
 
     setStarting(true);
     setErrorMessage('');
-    const ok = await startRound(gameCode, buildRound(lobby));
+    const ok = await startRound(gameCode, buildRound(lobby), gameData?.playerUids || {});
     setStarting(false);
 
     if (!ok) setErrorMessage('Could not start the game. Check your connection and try again.');
-  }, [gameCode, lobby, starting]);
+  }, [gameCode, lobby, starting, gameData?.playerUids]);
 
   const finishGame = useCallback(async () => {
     try {
-      await deleteGame(gameCode);
+      await deleteGame(gameCode, lobby.players);
       navigate('/');
     } catch (error) {
       console.error('Error deleting document: ', error);
       setErrorMessage('Could not end the game. Try again.');
     }
-  }, [gameCode, navigate]);
+  }, [gameCode, navigate, lobby.players]);
 
   const actions = useMemo(() => ({
     setNewTask,

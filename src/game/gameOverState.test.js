@@ -4,8 +4,11 @@ const game = (over = {}) => ({
   players: ['tyler', 'sam', 'kai', 'rae'],
   creator: 'tyler',
   creatorUid: 'uid-tyler',
-  roles: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate', rae: 'Crewmate' },
+  imposterCount: 1,
+  tasksPerCrewmate: 2,
   killList: ['sam'],
+  // every player publishes their own role once the round is over
+  revealed: { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate', rae: 'Crewmate' },
   winner: 'Imposters',
   ...over
 });
@@ -29,25 +32,25 @@ describe('revealRoster', () => {
     expect(new Set(all.map((e) => e.color)).size).toBe(4);
   });
 
-  test('leaves out anyone who was never dealt a role', () => {
+  test('leaves out anyone whose role has not been published', () => {
     const withLatecomer = game({ players: ['tyler', 'sam', 'kai', 'rae', 'ghost'] });
     const { imposters, crewmates } = revealRoster(withLatecomer);
     expect([...imposters, ...crewmates].map((e) => e.name)).not.toContain('ghost');
   });
 
   test('survives a game that never started', () => {
-    expect(revealRoster(null)).toEqual({ imposters: [], crewmates: [] });
+    expect(revealRoster(null)).toEqual({ imposters: [], crewmates: [], pending: 0 });
   });
 
   test('handles several imposters', () => {
-    const twoImposters = game({ roles: { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' } });
+    const twoImposters = game({ revealed: { tyler: 'Imposter', rae: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' } });
     expect(revealRoster(twoImposters).imposters.map((e) => e.name)).toEqual(['tyler', 'rae']);
   });
 });
 
 describe('deriveGameOverState', () => {
   test('carries the roster alongside the result', () => {
-    const state = deriveGameOverState(game(), 'sam', 'uid-sam');
+    const state = deriveGameOverState(game(), 'sam', 'uid-sam', { role: 'Crewmate' });
     expect(state.roster.imposters).toHaveLength(1);
     expect(state.playerWon).toBe(false);
   });

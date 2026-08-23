@@ -9,6 +9,7 @@ import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { roleName } from '../game/terminology';
+import { usePrivateRole } from './usePrivateRole';
 
 const TYPEWRITER_MS = 40;
 const VERDICT_DELAY_MS = 700;
@@ -44,6 +45,7 @@ function useTypewriter(text, delayMs = 0) {
 export function useMeeting(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
 
   const [selectedVote, setSelectedVote] = useState('');
@@ -51,7 +53,7 @@ export function useMeeting(gameCode) {
   const [selectedKillPlayer, setSelectedKillPlayer] = useState('');
   const [secondsLeft, setSecondsLeft] = useState(null);
 
-  const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid()), [gameData, playerName]);
+  const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid(), privateData), [gameData, playerName, privateData]);
   const displayedResult = useTypewriter(meeting.votingResult);
   const verdictText = meeting.ejected
     ? (meeting.ejectedWasImposter

@@ -47,7 +47,7 @@ describe('every screen agrees with the rules about who the host is', () => {
     ['lobby', (g, uid) => deriveLobbyState(g, 'tyler', uid).isCreator],
     ['round', (g, uid) => deriveRoundState(g, 'tyler', uid).isCreator],
     ['meeting', (g, uid) => deriveMeetingState(g, 'tyler', uid).isCreator],
-    ['game over', (g, uid) => deriveGameOverState(g, 'tyler', uid).isCreator]
+    ['game over', (g, uid) => deriveGameOverState(g, 'tyler', uid, { role: 'Imposter' }).isCreator]
   ];
 
   cases.forEach(([name, isCreatorOn]) => {
@@ -67,16 +67,22 @@ describe('every screen agrees with the rules about who the host is', () => {
 
 describe('deriveGameOverState', () => {
   test('uses the recorded winner when there is one', () => {
-    expect(deriveGameOverState(game({ winner: 'Imposters' }), 'sam', UID).winner).toBe('Imposters');
+    const s = deriveGameOverState(game({ winner: 'Imposters' }), 'sam', UID, { role: 'Crewmate' });
+    expect(s.winner).toBe('Imposters');
   });
 
-  test('tells a crewmate they won when crewmates won', () => {
-    const s = deriveGameOverState(game({ winner: 'Crewmates' }), 'sam', UID);
+  test('tells a tasker they won when taskers won', () => {
+    const s = deriveGameOverState(game({ winner: 'Crewmates' }), 'sam', UID, { role: 'Crewmate' });
     expect(s.playerWon).toBe(true);
   });
 
-  test('tells the imposter they lost when crewmates won', () => {
-    const s = deriveGameOverState(game({ winner: 'Crewmates' }), 'tyler', UID);
+  test('tells the traitor they lost when taskers won', () => {
+    const s = deriveGameOverState(game({ winner: 'Crewmates' }), 'tyler', UID, { role: 'Imposter' });
     expect(s.playerWon).toBe(false);
+  });
+
+  test('falls back to the published role once your private document is gone', () => {
+    const g = game({ winner: 'Crewmates', revealed: { sam: 'Crewmate' } });
+    expect(deriveGameOverState(g, 'sam', UID, null).playerWon).toBe(true);
   });
 });

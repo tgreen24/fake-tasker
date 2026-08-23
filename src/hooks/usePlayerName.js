@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { claimSeat } from '../game/mutations';
 import { loadSession, saveSession } from '../session';
 
 export function usePlayerName(gameCode) {
@@ -13,7 +14,9 @@ export function usePlayerName(gameCode) {
   });
 
   useEffect(() => {
-    if (playerName && gameCode) saveSession(gameCode, playerName);
+    if (!playerName || !gameCode) return;
+    saveSession(gameCode, playerName);
+    claimSeat(gameCode, playerName);
   }, [playerName, gameCode]);
 
   return playerName;

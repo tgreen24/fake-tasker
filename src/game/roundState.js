@@ -7,14 +7,15 @@ const IMPOSTER = 'Imposter';
 const playersWithRole = (roles, role) =>
   Object.keys(roles).filter((player) => roles[player] === role).sort();
 
-export function deriveRoundState(gameData, playerName, uid) {
-  const roles = gameData?.roles || {};
+export function deriveRoundState(gameData, playerName, uid, privateData) {
   const killList = gameData?.killList || [];
   const sabotages = gameData?.sabotages || {};
-  const assigned = gameData?.assignedTasks || {};
-  const completed = gameData?.completedTasks || {};
 
-  const crewmates = playersWithRole(roles, CREWMATE);
+  // Only a traitor is given the map, so only a traitor can read the room.
+  const roleMap = privateData?.roleMap || {};
+  const role = privateData?.role;
+
+  const crewmates = playersWithRole(roleMap, CREWMATE);
   const mySabotage = sabotages[playerName];
   const sabotagingImposter = Object.keys(sabotages).find(
     (imposter) => sabotages[imposter]?.sabotagedPlayer === playerName
@@ -23,13 +24,11 @@ export function deriveRoundState(gameData, playerName, uid) {
   const progress = taskProgress(gameData);
 
   return {
-    role: roles[playerName],
-    // A meeting has already happened this round, so roles are long since dealt.
+    role,
     returningFromMeeting: !!gameData?.votingResult,
     roundStartedAt: gameData?.roundStartedAt,
-    // Traitors already know everyone's role; taskers never call this.
-    roleOf: (player) => roles[player],
     meetingEndedAt: gameData?.resultUntil,
+    roleOf: (player) => roleMap[player],
     isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
     killCooldown: gameData?.killCooldown || 30,
@@ -37,17 +36,18 @@ export function deriveRoundState(gameData, playerName, uid) {
     sabotageCooldownUntil: gameData?.sabotageCooldowns?.[playerName],
     killList,
     crewmates,
-    fellowImposters: playersWithRole(roles, IMPOSTER).filter((player) => player !== playerName),
-    tasks: assigned[playerName] || [],
-    completedTasks: completed[playerName] || [],
+    fellowImposters: playersWithRole(roleMap, IMPOSTER).filter((player) => player !== playerName),
+    tasks: privateData?.tasks || [],
+    completedTasks: privateData?.completedTasks || [],
     tasksBlocked: !!sabotagingImposter,
     sabotagingImposter: sabotagingImposter || '',
     sabotageActive: !!mySabotage,
     sabotagedPlayer: mySabotage?.sabotagedPlayer || '',
+    // Who still has tasks outstanding is no longer knowable -- progress is one
+    // shared number now -- so any living tasker not already sabotaged is fair game.
     eligibleCrewmates: crewmates.filter((mate) => {
-      const outstanding = (assigned[mate]?.length || 0) > (completed[mate]?.length || 0);
       const alreadySabotaged = Object.values(sabotages).some((s) => s.sabotagedPlayer === mate);
-      return outstanding && !alreadySabotaged && !killList.includes(mate);
+      return !alreadySabotaged && !killList.includes(mate);
     }),
     totalTasks: progress.goal,
     totalCompletedTasks: progress.done,
@@ -60,18 +60,3 @@ export function toggledTaskList(completedTasks, task) {
     ? completedTasks.filter((entry) => entry !== task)
     : [...completedTasks, task];
 }
-
-// A win by tasks counts the whole crew, so the caller's own pending write has
-// to be folded in -- the snapshot will not have landed yet.
-export function everyoneFinishedTasks(gameData, playerName, nextCompleted) {
-  const roles = gameData?.roles || {};
-  const crewmates = playersWithRole(roles, CREWMATE);
-  if (crewmates.length === 0) return false;
-
-  return crewmates.every((mate) => {
-    const assigned = gameData?.assignedTasks?.[mate] || [];
-    const done = mate === playerName ? nextCompleted : (gameData?.completedTasks?.[mate] || []);
-    return done.length >= assigned.length;
-  });
-}
-

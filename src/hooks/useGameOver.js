@@ -6,16 +6,20 @@ import { deriveGameOverState } from '../game/gameOverState';
 import { clearSession } from '../session';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
+import { usePrivateRole } from './usePrivateRole';
+import { usePublishOwnRole } from './usePublishOwnRole';
 
 export function useGameOver(gameCode) {
   const navigate = useNavigate();
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
+  usePublishOwnRole(gameCode, gameData, playerName, privateData?.role);
   const [errorMessage, setErrorMessage] = useState('');
 
   const summary = useMemo(
-    () => deriveGameOverState(gameData, playerName, currentUid()),
-    [gameData, playerName]
+    () => deriveGameOverState(gameData, playerName, currentUid(), privateData),
+    [gameData, playerName, privateData]
   );
 
   const endGameAndReturnToLobby = useCallback(async () => {

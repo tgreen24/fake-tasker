@@ -1,5 +1,5 @@
 import {
-  doc, setDoc, deleteDoc, updateDoc, runTransaction, increment,
+  doc, setDoc, updateDoc, runTransaction, writeBatch, increment,
   arrayUnion, arrayRemove, deleteField, serverTimestamp, Timestamp
 } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -16,6 +16,7 @@ import { GAME_LIFETIME_MS, MAX_PLAYERS } from './constants';
 export { GAME_LIFETIME_MS, MAX_PLAYERS };
 
 const gameRef = (gameCode) => doc(db, 'games', gameCode);
+const playerRef = (gameCode, playerName) => doc(db, 'games', gameCode, 'players', playerName);
 const expiry = () => Timestamp.fromMillis(Date.now() + GAME_LIFETIME_MS);
 
 // ── lifecycle ──────────────────────────────────────────────
@@ -25,6 +26,7 @@ export function createGame(gameCode, playerName) {
     players: [playerName],
     creator: playerName,
     creatorUid: auth.currentUser?.uid || null,
+    playerUids: { [playerName]: auth.currentUser?.uid || null },
     tasks: [],
     gameStarted: false,
     gameEnded: false,
@@ -39,11 +41,28 @@ export function createGame(gameCode, playerName) {
 }
 
 export function joinGame(gameCode, playerName) {
-  return updateDoc(gameRef(gameCode), { players: arrayUnion(playerName) });
+  return updateDoc(gameRef(gameCode), {
+    players: arrayUnion(playerName),
+    [`playerUids.${playerName}`]: auth.currentUser?.uid || null
+  });
 }
 
-export function deleteGame(gameCode) {
-  return deleteDoc(gameRef(gameCode));
+// Stamps your account onto your own role document. The host addresses it at
+// deal time from what has been announced; this repairs the case where that had
+// not arrived yet, which otherwise locks a player out of their own role.
+export const claimOwnSeat = (gameCode, playerName) =>
+  updateDoc(playerRef(gameCode, playerName), { uid: auth.currentUser?.uid || null });
+
+// Re-announced on every load: an account can change between sessions, and a
+// private document addressed to a stale one is unreadable by its owner.
+export const claimSeat = (gameCode, playerName) =>
+  updateGame(gameCode, { [`playerUids.${playerName}`]: auth.currentUser?.uid || null });
+
+export async function deleteGame(gameCode, players = []) {
+  const batch = writeBatch(db);
+  players.forEach((playerName) => batch.delete(playerRef(gameCode, playerName)));
+  batch.delete(gameRef(gameCode));
+  await batch.commit();
 }
 
 export const kickPlayer = (gameCode, playerName) =>
@@ -60,32 +79,58 @@ export const removeTask = (gameCode, task) =>
 export const updateSetting = (gameCode, field, value) =>
   updateGame(gameCode, { [field]: value });
 
-export const startRound = (gameCode, { roles, assignedTasks, imposterHistory, completedTasks }) =>
-  updateGame(gameCode, {
-    roles,
-    assignedTasks,
-    imposterHistory,
-    completedTasks,
-    killList: [],
-    votes: {},
-    sabotages: {},
-    killCooldowns: {},
-    sabotageCooldowns: {},
-    revealed: {},
-    tasksCompleted: 0,
-    gameStarted: true,
-    gameEnded: false,
-    meetingCalled: false,
-    roundStartedAt: Date.now(),
-    expiresAt: expiry(),
-    meetingCaller: deleteField(),
-    votingResult: deleteField(),
-    resultUntil: deleteField(),
-    voteDeadline: deleteField(),
-    ejected: deleteField(),
-    winner: deleteField(),
-    winReason: deleteField()
-  });
+// Roles and task lists live in games/{code}/players/{name}, addressed to the
+// account that holds the seat. The shared document never carries them again.
+// Traitors get the whole map in theirs, because a traitor legitimately knows
+// who everyone is -- that is what the target list has always been.
+export async function startRound(gameCode, { roles, assignedTasks, imposterHistory }, playerUids = {}) {
+  try {
+    const batch = writeBatch(db);
+
+    Object.keys(roles).forEach((playerName) => {
+      const isTraitor = roles[playerName] === 'Imposter';
+      batch.set(playerRef(gameCode, playerName), {
+        uid: playerUids[playerName] || null,
+        role: roles[playerName],
+        tasks: assignedTasks[playerName] || [],
+        completedTasks: [],
+        ...(isTraitor ? { roleMap: roles } : {})
+      });
+    });
+
+    batch.update(gameRef(gameCode), {
+      imposterHistory,
+      killList: [],
+      votes: {},
+      sabotages: {},
+      revealed: {},
+      tasksCompleted: 0,
+      killCooldowns: {},
+      sabotageCooldowns: {},
+      gameStarted: true,
+      gameEnded: false,
+      meetingCalled: false,
+      roundStartedAt: Date.now(),
+      expiresAt: expiry(),
+      roles: deleteField(),
+      assignedTasks: deleteField(),
+      completedTasks: deleteField(),
+      meetingCaller: deleteField(),
+      votingResult: deleteField(),
+      resultUntil: deleteField(),
+      voteDeadline: deleteField(),
+      ejected: deleteField(),
+      winner: deleteField(),
+      winReason: deleteField()
+    });
+
+    await batch.commit();
+    return true;
+  } catch (error) {
+    console.error('[round] could not start the round', error);
+    return false;
+  }
+}
 
 export const endRound = (gameCode) => updateGame(gameCode, {
   gameStarted: false,
@@ -152,8 +197,15 @@ export const publishOwnRole = (gameCode, playerName, role) =>
 export const addTaskProgress = (gameCode, delta) =>
   updateGame(gameCode, { tasksCompleted: increment(delta) });
 
-export const setCompletedTasks = (gameCode, playerName, tasks) =>
-  updateGame(gameCode, { [`completedTasks.${playerName}`]: tasks });
+export async function setCompletedTasks(gameCode, playerName, tasks) {
+  try {
+    await updateDoc(playerRef(gameCode, playerName), { completedTasks: tasks });
+    return true;
+  } catch (error) {
+    console.error('[tasks] could not save progress', error);
+    return false;
+  }
+}
 
 export const startSabotage = (gameCode, imposter, crewmate) =>
   updateGame(gameCode, { [`sabotages.${imposter}`]: { sabotagedPlayer: crewmate } });

@@ -6,9 +6,9 @@ import { alivePlayersOf, votesCastBy } from '../voteLogic';
 export const HOST_HEAD_START_MS = 2500;
 export const PEER_STAGGER_MS = 750;
 
-export function deriveMeetingState(gameData, playerName, uid) {
+export function deriveMeetingState(gameData, playerName, uid, privateData) {
   const players = gameData?.players || [];
-  const roles = gameData?.roles || {};
+  const roleMap = privateData?.roleMap || {};
   const deadPlayers = gameData?.killList || [];
   const votes = gameData?.votes || {};
   const votingResult = gameData?.votingResult || '';
@@ -16,11 +16,11 @@ export function deriveMeetingState(gameData, playerName, uid) {
 
   return {
     players,
-    roles,
+    roles: roleMap,
     colors: assignColors(players),
     deadPlayers,
     alivePlayers,
-    role: roles[playerName],
+    role: privateData?.role,
     isCreator: isHost(gameData, uid),
     isAlive: !deadPlayers.includes(playerName),
     meetingCaller: gameData?.meetingCaller || '',
@@ -28,13 +28,13 @@ export function deriveMeetingState(gameData, playerName, uid) {
     voteDeadline: gameData?.voteDeadline,
     votingResult,
     ejected: gameData?.ejected || '',
-    ejectedWasImposter: roles[gameData?.ejected] === 'Imposter',
+    ejectedWasImposter: (gameData?.revealed || {})[gameData?.ejected] === 'Imposter',
     votingEnded: showingVoteResult(gameData) || (!gameData?.meetingCalled && !!votingResult),
     myVote: votes[playerName],
     ballot: alivePlayers.filter((player) => player !== playerName),
     votesCast: votesCastBy(gameData, alivePlayers),
     killableBy: (killer) => players.filter((player) =>
-      !deadPlayers.includes(player) && player !== killer && roles[player] !== 'Imposter')
+      !deadPlayers.includes(player) && player !== killer && roleMap[player] !== 'Imposter')
   };
 }
 
