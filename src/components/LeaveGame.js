@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { leaveGame } from '../game/mutations';
 import { clearSession } from '../session';
 
 const CONFIRM_WINDOW_MS = 4000;
 
-// Purely local: no write, nothing for anyone else to see. It exists so a
-// player is never trapped in a game nobody can end -- which cannot be
-// detected, only escaped from.
-function LeaveGame() {
+// Exists so a player is never trapped in a game nobody can end -- which
+// cannot be detected, only escaped from.
+function LeaveGame({ gameCode, playerName, inRound = false, role, tasksOutstanding = 0 }) {
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
 
@@ -17,11 +17,22 @@ function LeaveGame() {
     return () => clearTimeout(timer);
   }, [confirming]);
 
-  const onClick = () => {
+  const onClick = async () => {
     if (!confirming) {
       setConfirming(true);
       return;
     }
+
+    // Go regardless of whether the write lands; being stuck here is the thing
+    // this button exists to prevent.
+    if (gameCode && playerName) {
+      try {
+        await leaveGame(gameCode, playerName, { inRound, role, tasksOutstanding });
+      } catch (error) {
+        console.warn('[leave] could not remove your seat', error);
+      }
+    }
+
     clearSession();
     navigate('/', { replace: true });
   };

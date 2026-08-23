@@ -63,7 +63,7 @@ function GameLobby() {
 
         <HowToPlay />
 
-        <LeaveGame />
+        <LeaveGame gameCode={gameCode} playerName={playerName} />
 
         {isCreator && (
           <div className="creator-controls">

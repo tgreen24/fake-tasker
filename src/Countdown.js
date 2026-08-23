@@ -186,7 +186,13 @@ function Countdown() {
               )}
             </div>
 
-            <LeaveGame />
+            <LeaveGame
+              gameCode={gameCode}
+              playerName={playerName}
+              inRound
+              role={role}
+              tasksOutstanding={Math.max(0, tasks.length - completedTasks.length)}
+            />
           </div>
         )}
       </div>

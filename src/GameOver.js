@@ -57,7 +57,7 @@ function GameOver() {
             </p>
           )}
 
-          <LeaveGame />
+          <LeaveGame gameCode={gameCode} playerName={playerName} />
         </div>
       </div>
     </div>

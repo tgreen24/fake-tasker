@@ -65,6 +65,27 @@ export async function deleteGame(gameCode, players = []) {
   await batch.commit();
 }
 
+// Leaving before a round removes the seat outright. Leaving during one cannot:
+// the totals adjudication rests on are derived from the roster and the imposter
+// count, so shrinking it mid-round would make a departed traitor look
+// permanently alive. So leaving mid-round is being out, and their unfinished
+// tasks are credited -- otherwise the goal counts work nobody can ever do and
+// the round can never be won by tasks.
+export function leaveGame(gameCode, playerName, { inRound = false, role, tasksOutstanding = 0 } = {}) {
+  if (!inRound) {
+    return updateGame(gameCode, {
+      players: arrayRemove(playerName),
+      [`playerUids.${playerName}`]: deleteField()
+    });
+  }
+
+  return updateGame(gameCode, {
+    killList: arrayUnion(playerName),
+    ...(role ? { [`revealed.${playerName}`]: role } : {}),
+    ...(tasksOutstanding > 0 ? { tasksCompleted: increment(tasksOutstanding) } : {})
+  });
+}
+
 export const kickPlayer = (gameCode, playerName) =>
   updateGame(gameCode, { players: arrayRemove(playerName) });
 

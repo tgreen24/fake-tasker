@@ -167,3 +167,48 @@ describe('settling is a function of the board, not of who acted', () => {
     expect(decideOutcomeFromCounts({ ...board, tasksCompleted: 3 })).toBe('Crewmates');
   });
 });
+
+// Leaving used to be purely local, so a departed player stayed in the roster:
+// dealt a role next round, counted in the totals, and their unfinished tasks
+// kept the goal permanently out of reach.
+describe('a player leaving', () => {
+  const inLobby = {
+    players: ['tyler', 'sam', 'kai', 'rae'],
+    imposterCount: 1,
+    tasksPerCrewmate: 2,
+    killList: [],
+    revealed: {},
+    tasksCompleted: 0
+  };
+
+  test('before a round, the roster shrinks and so does the goal', () => {
+    expect(taskGoal(inLobby)).toBe(6);
+    const afterLeaving = { ...inLobby, players: ['tyler', 'sam', 'kai'] };
+    expect(totalsFor(afterLeaving)).toEqual({ players: 3, traitors: 1, taskers: 2 });
+    expect(taskGoal(afterLeaving)).toBe(4);
+  });
+
+  test('during a round, a departed traitor counts as out rather than alive forever', () => {
+    const left = { ...inLobby, killList: ['tyler'], revealed: { tyler: 'Imposter' } };
+    expect(livingCounts(left)).toMatchObject({ traitors: 0 });
+    expect(decideOutcomeFromCounts(left)).toBe('Crewmates');
+  });
+
+  test('during a round, a departed tasker does not strand the task goal', () => {
+    // Two of three taskers finished; the third leaves with both outstanding,
+    // and those are credited on the way out.
+    const left = {
+      ...inLobby,
+      killList: ['rae'],
+      revealed: { rae: 'Crewmate' },
+      tasksCompleted: 4 + 2
+    };
+    expect(taskGoal(left)).toBe(6);
+    expect(decideOutcomeFromCounts(left)).toBe('Crewmates');
+  });
+
+  test('without that credit the round could never be won by tasks', () => {
+    const stranded = { ...inLobby, killList: ['rae'], revealed: { rae: 'Crewmate' }, tasksCompleted: 4 };
+    expect(decideOutcomeFromCounts(stranded)).toBeNull();
+  });
+});
