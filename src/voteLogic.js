@@ -1,4 +1,4 @@
-import { TRAITOR } from './game/terminology';
+import { EXILED, TRAITOR } from './game/terminology';
 export const VOTE_DURATION_MS = 180000;
 
 export function alivePlayersOf(gameData) {
@@ -39,19 +39,19 @@ export function resolveVote(gameData) {
     });
 
   const tallies = Object.values(counts);
-  if (tallies.length === 0) return { message: 'Nobody voted, so nobody was voted out.', votedOut: null };
+  if (tallies.length === 0) return { message: 'Nobody voted, so nobody was exiled.', votedOut: null };
 
   const highest = Math.max(...tallies);
   const leaders = Object.keys(counts).filter((candidate) => counts[candidate] === highest);
 
-  if (leaders.length > 1) return { message: 'No one was voted out due to a tie.', votedOut: null };
+  if (leaders.length > 1) return { message: 'A tie, so nobody was exiled.', votedOut: null };
   if (leaders[0] === 'skip') return { message: 'The vote was skipped.', votedOut: null };
 
   const votedOut = leaders[0];
   return {
     message: roles[votedOut] === 'Imposter'
-      ? `${votedOut} was a ${TRAITOR} and was voted out!`
-      : `${votedOut} was not a ${TRAITOR} and was voted out.`,
+      ? `${votedOut} was a ${TRAITOR} and was ${EXILED}!`
+      : `${votedOut} was not a ${TRAITOR} and was ${EXILED}.`,
     votedOut
   };
 }

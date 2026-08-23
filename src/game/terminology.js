@@ -15,6 +15,10 @@ export const roleNamePlural = (role) => TERMS[role]?.many || role;
 export const roleNameLower = (role) => TERMS[role]?.lower || role;
 export const roleNameLowerPlural = (role) => TERMS[role]?.lowerMany || role;
 
+// What the group does to somebody by vote. The stored field is still called
+// ejected; this is the word players see.
+export const EXILED = 'exiled';
+
 // Winner is stored as the plural team name.
 export const teamName = (winner) =>
   winner === 'Imposters' ? 'Traitors' : winner === 'Crewmates' ? 'Taskers' : winner;

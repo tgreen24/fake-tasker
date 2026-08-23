@@ -66,9 +66,9 @@ describe('winReasonText', () => {
 
   test('names all four ways a round can end', () => {
     expect(reason('tasks')).toBe('All tasks completed');
-    expect(reason('imposters-ejected')).toBe('Every traitor was voted out');
+    expect(reason('imposters-ejected')).toBe('Every traitor was exiled');
     expect(reason('kills')).toBe('The taskers were outnumbered');
-    expect(reason('ejection')).toBe('The taskers voted out one of their own');
+    expect(reason('ejection')).toBe('The taskers exiled one of their own');
   });
 
   test('says nothing rather than inventing a reason for older rounds', () => {

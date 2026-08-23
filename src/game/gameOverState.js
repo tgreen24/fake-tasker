@@ -5,9 +5,9 @@ import { roleNameLower, roleNameLowerPlural } from './terminology';
 
 const WIN_REASONS = {
   tasks: 'All tasks completed',
-  'imposters-ejected': `Every ${roleNameLower('Imposter')} was voted out`,
+  'imposters-ejected': `Every ${roleNameLower('Imposter')} was exiled`,
   kills: `The ${roleNameLowerPlural('Crewmate')} were outnumbered`,
-  ejection: `The ${roleNameLowerPlural('Crewmate')} voted out one of their own`,
+  ejection: `The ${roleNameLowerPlural('Crewmate')} exiled one of their own`,
   outnumbered: `The ${roleNameLowerPlural('Crewmate')} were outnumbered`
 };
 

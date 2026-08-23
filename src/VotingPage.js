@@ -7,6 +7,7 @@ import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import TypedVerdict from './components/TypedVerdict';
+import { EXILED } from './game/terminology';
 import { roleName, roleNameLower } from './game/terminology';
 
 function DeadPlayersList({ deadPlayers, colors }) {
@@ -71,7 +72,7 @@ function VotingPage() {
                 <div className="ejection-avatar">
                   <PlayerAvatar name={ejected} color={colors[ejected]} />
                 </div>
-                <h3 className="ejection-name">{ejected} was ejected</h3>
+                <h3 className="ejection-name">{ejected} was {EXILED}</h3>
                 <p className="ejection-verdict">
                   <TypedVerdict
                     text={verdictText}
