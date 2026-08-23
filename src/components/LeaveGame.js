@@ -27,9 +27,14 @@ function LeaveGame({ gameCode, playerName, inRound = false, role, tasksOutstandi
     // this button exists to prevent.
     if (gameCode && playerName) {
       try {
-        await leaveGame(gameCode, playerName, { inRound, role, tasksOutstanding });
+        const released = await leaveGame(gameCode, playerName, { inRound, role, tasksOutstanding });
+        if (!released) {
+          console.warn(
+            `[leave] your seat was not released -- ${playerName} will still appear to everyone else`
+          );
+        }
       } catch (error) {
-        console.warn('[leave] could not remove your seat', error);
+        console.warn('[leave] could not release your seat', error);
       }
     }
 
