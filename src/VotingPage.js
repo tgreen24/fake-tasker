@@ -114,22 +114,22 @@ function VotingPage() {
                   <span>{player}</span>
                 </Selectable>
               ))}
+              <Selectable
+                as="div"
+                className={`voting-card skip ${selectedVote === 'skip' ? 'selected' : ''}`}
+                selected={selectedVote === 'skip'}
+                label="Skip the vote"
+                onSelect={() => actions.selectVote('skip')}
+              >
+                <span className="avatar skip-mark" aria-hidden="true">✕</span>
+                <span>Skip</span>
+              </Selectable>
             </div>
-
-            <Selectable
-              as="div"
-              className={`voting-card ${selectedVote === 'skip' ? 'selected' : ''}`}
-              selected={selectedVote === 'skip'}
-              label="Skip the vote"
-              onSelect={() => actions.selectVote('skip')}
-            >
-              <span>Skip Vote</span>
-            </Selectable>
 
             {role === 'Imposter' && (
               <Selectable
                 as="div"
-                className="voting-card"
+                className="voting-action"
                 label={`Kill a ${roleNameLower('Crewmate')}`}
                 onSelect={actions.openKillDialog}
               >

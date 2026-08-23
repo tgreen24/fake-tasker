@@ -1119,3 +1119,40 @@ ul { list-style: none; margin: 0; padding: 0; }
   color: var(--text-dim);
   margin-top: -6px;
 }
+
+/* Skip sits in the ballot because it is a choice like any other, and needs
+   submitting the same way. The kill option is an action, so it stays out. */
+.voting-card.skip { color: var(--text-dim); }
+
+.skip-mark {
+  background: var(--surface-sunk);
+  color: var(--text-faint);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.skip-mark::before {
+  background: linear-gradient(160deg, #23313f 0%, #161f2a 100%);
+}
+
+.voting-card.skip.selected { color: var(--text); }
+.voting-card.skip.selected .skip-mark { color: var(--text); }
+
+.voting-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 18px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px dashed rgba(229, 72, 77, .45);
+  color: var(--danger);
+  font-size: .9rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+}
+
+.voting-action:hover { background: var(--danger-soft); }
+.voting-action:focus-visible { outline: none; box-shadow: var(--ring); }
