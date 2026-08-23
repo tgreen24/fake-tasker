@@ -58,13 +58,13 @@ export function useLobby(gameCode) {
 
   const finishGame = useCallback(async () => {
     try {
-      await deleteGame(gameCode, lobby.players);
+      await deleteGame(gameCode, lobby.players, gameData?.dealtSeats || []);
       navigate('/');
     } catch (error) {
       console.error('Error deleting document: ', error);
       setErrorMessage('Could not end the game. Try again.');
     }
-  }, [gameCode, navigate, lobby.players]);
+  }, [gameCode, navigate, lobby.players, gameData?.dealtSeats]);
 
   const actions = useMemo(() => ({
     setNewTask,

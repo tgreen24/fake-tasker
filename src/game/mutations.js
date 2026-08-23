@@ -58,9 +58,15 @@ export const claimOwnSeat = (gameCode, playerName) =>
 export const claimSeat = (gameCode, playerName) =>
   updateGame(gameCode, { [`playerUids.${playerName}`]: auth.currentUser?.uid || null });
 
-export async function deleteGame(gameCode, players = []) {
+// Firestore does not cascade, so the private documents have to go explicitly --
+// and by the seats that were dealt, not the current roster. Anyone kicked or
+// who left since the deal still has one, and once the parent is gone nothing
+// can reach it: the rules resolve the host by reading the parent, so an orphan
+// has no host and can never be read or deleted again.
+export async function deleteGame(gameCode, players = [], dealtSeats = []) {
+  const seats = Array.from(new Set([...players, ...dealtSeats]));
   const batch = writeBatch(db);
-  players.forEach((playerName) => batch.delete(playerRef(gameCode, playerName)));
+  seats.forEach((playerName) => batch.delete(playerRef(gameCode, playerName)));
   batch.delete(gameRef(gameCode));
   await batch.commit();
 }
@@ -130,6 +136,7 @@ export async function startRound(gameCode, { roles, assignedTasks, imposterHisto
 
     batch.update(gameRef(gameCode), {
       imposterHistory,
+      dealtSeats: arrayUnion(...Object.keys(roles)),
       killList: [],
       votes: {},
       sabotages: {},

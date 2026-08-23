@@ -244,6 +244,24 @@ await check('a seat with no account recorded can still be vacated',
 await check('leaving cannot be used to empty the roster',
   assertFails(updateDoc(doc(player, 'games', CODE), { players: [], leftBy: 'sam' })));
 
+// ── cleaning up a finished game ──
+await testEnv.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'games', CODE), {
+    players: ['tyler'], creator: 'tyler', creatorUid: HOST,
+    playerUids: { tyler: HOST }, tasks: [], dealtSeats: ['tyler', 'gone']
+  });
+  await setDoc(doc(db, 'games', CODE, 'players', 'gone'), {
+    uid: 'uid-departed', role: 'Crewmate', tasks: []
+  });
+});
+
+await check('the host can delete a seat belonging to somebody long gone',
+  assertSucceeds(deleteDoc(doc(host, 'games', CODE, 'players', 'gone'))));
+
+await check('a player cannot rewrite which seats were dealt',
+  assertFails(updateDoc(doc(player, 'games', CODE), { dealtSeats: ['tyler'] })));
+
 await testEnv.cleanup();
 
 const failed = results.filter(([, ok]) => !ok);

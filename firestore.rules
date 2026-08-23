@@ -36,7 +36,8 @@ service cloud.firestore {
       return [
         'roles', 'assignedTasks', 'imposterHistory',
         'imposterCount', 'tasksPerCrewmate', 'killCooldown',
-        'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid', 'roundStartedAt'
+        'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid', 'roundStartedAt',
+        'dealtSeats'
       ];
     }
 
