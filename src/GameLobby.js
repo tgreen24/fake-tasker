@@ -6,6 +6,8 @@ import PlayerAvatar from './components/PlayerAvatar';
 import ScreenHeader from './components/ScreenHeader';
 import HowToPlay from './components/HowToPlay';
 import InviteButton from './components/InviteButton';
+import TaskEditor from './components/TaskEditor';
+import { TASK_PACKS } from './game/taskPacks';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 
@@ -67,41 +69,13 @@ function GameLobby() {
 
         {isCreator && (
           <div className="creator-controls">
-            <div className="task-section">
-              <h3>Tasks</h3>
-              <ul>
-                {tasks.map((task) => (
-                  <li key={task} className="task-row">
-                    <span>{task}</span>
-                    <button
-                      className="kick-button"
-                      onClick={() => actions.removeTask(task)}
-                      aria-label={`Remove ${task}`}
-                      title="Remove task"
-                    >✕</button>
-                  </li>
-                ))}
-              </ul>
-              <div className="task-input">
-                <input
-                  type="text"
-                  value={newTask}
-                  onChange={(e) => actions.setNewTask(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && actions.addTask()}
-                  placeholder="Enter new task"
-                />
-                <button onClick={actions.addTask}>Add Task</button>
-              </div>
-            </div>
-
-            <div className="controls">
-              <button onClick={actions.startGame} disabled={players.length < 2 || starting} className="start-game-btn">
-                {starting ? 'Starting…' : 'Start Game'}
-              </button>
-              <button onClick={actions.finishGame} className="end-game-btn">
-                Finish Game and Delete Data
-              </button>
-            </div>
+            <button
+              onClick={actions.startGame}
+              disabled={players.length < 2 || starting}
+              className="start-game-btn"
+            >
+              {starting ? 'Starting…' : 'Start Game'}
+            </button>
 
             {players.length > 3 ? (
               <div className="imposter-select">
@@ -116,7 +90,7 @@ function GameLobby() {
                 </select>
               </div>
             ) : (
-              <p>There will be 1 {roleNameLower('Imposter')}.</p>
+              <p className="vote-progress">There will be 1 {roleNameLower('Imposter')}.</p>
             )}
 
             <div className="kill-cooldown-selection">
@@ -142,6 +116,20 @@ function GameLobby() {
                 ))}
               </select>
             </div>
+
+            <TaskEditor
+              tasks={tasks}
+              packs={TASK_PACKS}
+              newTask={newTask}
+              onSetNewTask={actions.setNewTask}
+              onAddTask={actions.addTask}
+              onRemoveTask={actions.removeTask}
+              onAddPack={actions.addManyTasks}
+            />
+
+            <button onClick={actions.finishGame} className="end-game-btn">
+              Finish Game and Delete Data
+            </button>
           </div>
         )}
       </div>

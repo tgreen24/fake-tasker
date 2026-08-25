@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  addTask as writeTask, deleteGame, kickPlayer as writeKick,
+  addTask as writeTask, addTasks as writeTasks, deleteGame, kickPlayer as writeKick,
   removeTask as writeRemoveTask, startRound, updateSetting as writeSetting
 } from '../game/mutations';
 import { deriveLobbyState, validateNewTask, validateStart } from '../game/lobbyState';
@@ -74,6 +74,15 @@ export function useLobby(gameCode) {
     removeTask: (task) => writeRemoveTask(gameCode, task).catch((error) => {
       console.error('Error removing task:', error);
     }),
+    addOneTask: (task) => writeTask(gameCode, task).catch((error) => {
+      console.error('Error adding task:', error);
+    }),
+    addManyTasks: (tasks) => {
+      if (!tasks.length) return undefined;
+      return writeTasks(gameCode, tasks).catch((error) => {
+        console.error('Error adding tasks:', error);
+      });
+    },
     kickPlayer: (playerToKick) => {
       if (playerToKick === playerName) return undefined;
       return writeKick(gameCode, playerToKick);

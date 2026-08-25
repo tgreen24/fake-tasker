@@ -109,6 +109,11 @@ export const kickPlayer = (gameCode, playerName) =>
 export const addTask = (gameCode, task) =>
   updateDoc(gameRef(gameCode), { tasks: arrayUnion(task) });
 
+// arrayUnion ignores anything already there, so adding a pack twice is a no-op
+// rather than a list full of duplicates.
+export const addTasks = (gameCode, tasks) =>
+  updateDoc(gameRef(gameCode), { tasks: arrayUnion(...tasks) });
+
 export const removeTask = (gameCode, task) =>
   updateDoc(gameRef(gameCode), { tasks: arrayRemove(task) });
 

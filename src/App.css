@@ -319,9 +319,11 @@ button:focus-visible { outline: none; box-shadow: var(--ring); }
 .emergency-meeting-btn:hover:not(:disabled) { background: var(--danger-hover); }
 
 .kick-button {
+  flex: 0 0 auto;
   padding: 0;
   width: 22px;
   height: 22px;
+  min-width: 22px;
   line-height: 1;
   font-size: .75rem;
   border-radius: 50%;
@@ -459,6 +461,21 @@ ul { list-style: none; margin: 0; padding: 0; }
   background: var(--surface-sunk);
   border: 1px solid var(--border);
   font-size: .92rem;
+  line-height: 1.35;
+}
+
+/* Let the text wrap onto as many lines as it needs; the remove control keeps
+   its size. Without min-width the text refuses to wrap and squeezes it
+   instead, and without flex-basis auto the button itself gets shrunk. */
+.task-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.task-row > .kick-button {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 1px;
 }
 
 /* ── timers ────────────────────────────────────────────────── */
@@ -1266,3 +1283,77 @@ ul { list-style: none; margin: 0; padding: 0; }
   margin-left: 6px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── task editor ───────────────────────────────────────────── */
+
+.task-editor {
+  background: var(--surface-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.task-editor > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 13px 14px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-editor > summary::-webkit-details-marker { display: none; }
+.task-editor > summary::after {
+  content: '+';
+  margin-left: auto;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-faint);
+}
+.task-editor[open] > summary { color: var(--accent); }
+.task-editor[open] > summary::after { content: '−'; }
+.task-editor > summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
+
+.task-count {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: .72rem;
+  letter-spacing: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-editor-body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pack-add-all {
+  width: 100%;
+  font-size: .84rem;
+  padding: 11px 14px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.pack-add-all:hover:not(:disabled) { background: var(--surface); }
+
+.task-group h5 {
+  margin: 0 0 8px;
+  font-size: .66rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.task-group + .task-group { margin-top: 14px; }
+.task-group ul { display: flex; flex-direction: column; gap: 6px; }
