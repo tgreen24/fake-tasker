@@ -4,7 +4,7 @@ import {
   recordKill, startSabotage, toggleTaskCompletion, undoKill
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
-import { deriveRoundState } from '../game/roundState';
+import { deriveRoundState, toggledTaskList } from '../game/roundState';
 import { currentUid } from '../firebase';
 import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
 import { useNow } from './useNow';
@@ -99,12 +99,22 @@ export function useCountdown(gameCode) {
       if (round.tasksBlocked || inFlight.current.has(task)) return;
       inFlight.current.add(task);
 
+      // Tick it now. A transaction has to reach the server before it can say
+      // what it did, and a tap that sits there doing nothing reads as one that
+      // was missed -- which is the thing that got tapped twice in the first
+      // place. This is a guess at the answer, replaced by the real one below.
+      const previous = completedTasks;
+      setOwnTasks(toggledTaskList(previous, task));
+
       // The list comes back from the write itself, decided on the server, so
       // what we act on next is what actually landed rather than what the
       // screen believed a moment ago.
       const nextCompleted = await toggleTaskCompletion(gameCode, playerName, task)
         .finally(() => inFlight.current.delete(task));
-      if (!nextCompleted) return;
+      if (!nextCompleted) {
+        setOwnTasks(previous);
+        return;
+      }
 
       setOwnTasks(nextCompleted);
 
@@ -138,7 +148,10 @@ export function useCountdown(gameCode) {
     },
 
     clearMySabotage: () => clearSabotage(gameCode, playerName)
-  }), [gameCode, playerName, round, killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt]);
+  }), [
+    gameCode, playerName, round, completedTasks,
+    killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt
+  ]);
 
   return {
     state: {
