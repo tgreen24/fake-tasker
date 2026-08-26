@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, getDocFromServer } from 'firebase/firestore';
 import { db } from '../firebase';
 import { routeForState } from '../gameRoute';
+import { recordExit } from '../session';
 
 const ROUTE_TICK_MS = 1000;
 const MAX_BACKOFF_MS = 15000;
@@ -14,6 +15,12 @@ const OFFLINE_GRACE_MS = 3000;
 // tab. So we also watch how long it has been since a snapshot landed.
 const STALE_RESYNC_MS = 30000;
 const STALE_REBUILD_MS = 60000;
+
+// How long to wait for the server to settle whether a game exists before
+// accepting that it does not. Only ever applies to a game this client has
+// never successfully read; once we have seen it, a cold cache never takes it
+// away again.
+const MISSING_GRACE_MS = 15000;
 
 export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
   const navigate = useNavigate();
@@ -28,11 +35,18 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
   routeRef.current = (data) => {
     if (!gameCode) return;
     if (!playerName) {
+      recordExit('this tab does not know which player it is', { gameCode });
       navigate('/', { replace: true });
       return;
     }
     const target = routeForState(data, playerName, gameCode);
     if (target === window.location.pathname) return;
+    // The other way to land on the home screen is abandon(), which records its
+    // own reason -- this covers being dropped from the roster while the game
+    // itself is still there.
+    if (target === '/' && data) {
+      recordExit('no longer on the roster', { gameCode, playerName });
+    }
     navigate(target, { state: { playerName }, replace: true });
   };
 
@@ -45,6 +59,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     let offlineTimer = null;
     let backoff = 1000;
     let lastSnapshotAt = Date.now();
+    let missingSince = null;
 
     const gameRef = doc(db, 'games', gameCode);
 
@@ -73,6 +88,17 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       }, OFFLINE_GRACE_MS);
     };
 
+    // Deliberately does not read playerName: this effect owns the listener and
+    // must not tear it down and rebuild it just because a name changed.
+    const abandon = (reason) => {
+      recordExit(reason, { gameCode });
+      missingSince = null;
+      dataRef.current = null;
+      setGameData(null);
+      setLoading(false);
+      routeRef.current(null);
+    };
+
     const receive = (snapshot) => {
       if (cancelled) return;
       backoff = 1000;
@@ -80,6 +106,24 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       noteFreshness(snapshot.metadata.fromCache);
 
       if (!snapshot.exists()) {
+        // A listener rebuilt against an empty local cache reports the document
+        // as missing before the server has said anything about it. That is a
+        // cold cache, not a deleted game, and treating it as one is what put a
+        // backgrounded phone back on the home screen mid-round. Only a server
+        // answer is allowed to end somebody's game.
+        if (snapshot.metadata.fromCache) {
+          if (missingSince === null) missingSince = Date.now();
+          resync();
+          // Waiting forever is its own way of being stuck, so a game we have
+          // never once read is given up on. A game already on screen is not:
+          // there is nothing to wait for and nothing to gain by leaving.
+          if (!dataRef.current && Date.now() - missingSince > MISSING_GRACE_MS) {
+            abandon('waited for the game and it never arrived');
+          }
+          return;
+        }
+
+        missingSince = null;
         dataRef.current = null;
         setGameData(null);
         setLoading(false);
@@ -87,6 +131,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         return;
       }
 
+      missingSince = null;
       const data = snapshot.data();
       dataRef.current = data;
       setGameData(data);
@@ -140,6 +185,13 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     const tick = () => {
       if (document.hidden) return;
       if (dataRef.current) routeRef.current(dataRef.current);
+
+      // A listener that never delivers a second snapshot would otherwise leave
+      // the grace period running forever.
+      if (missingSince !== null && !dataRef.current && Date.now() - missingSince > MISSING_GRACE_MS) {
+        abandon('waited for the game and it never arrived');
+        return;
+      }
 
       const quietFor = Date.now() - lastSnapshotAt;
       if (quietFor > STALE_REBUILD_MS) rebuild();
