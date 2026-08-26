@@ -269,18 +269,36 @@ export const publishOwnSummary = (gameCode, playerName, role, done) =>
 export const publishFinishTime = (gameCode, playerName) =>
   updateGame(gameCode, { [`finishedAt.${playerName}`]: Date.now() });
 
+// Marking the task and crediting the shared total are one commit, decided from
+// the server's copy of your list rather than the screen's.
+//
+// They used to be two writes. The credit was an increment, which always lands;
+// the mark was a whole-array overwrite built from whatever the screen last
+// showed, which could be a snapshot that had not caught up or one a forced
+// resync had just reverted to server state. So the credit stuck and the mark
+// did not, and the next tap overwrote the lost one for good -- a round that
+// reaches its target with tasks still showing undone.
+//
 // One shared total rather than a count per player: a traitor having no task
 // count would identify them.
-export const addTaskProgress = (gameCode, delta) =>
-  updateGame(gameCode, { tasksCompleted: increment(delta) });
-
-export async function setCompletedTasks(gameCode, playerName, tasks) {
+export async function toggleTaskCompletion(gameCode, playerName, task) {
   try {
-    await updateDoc(playerRef(gameCode, playerName), { completedTasks: tasks });
-    return true;
+    return await runTransaction(db, async (tx) => {
+      const seat = playerRef(gameCode, playerName);
+      const snapshot = await tx.get(seat);
+      if (!snapshot.exists()) return null;
+
+      const current = snapshot.data().completedTasks || [];
+      const wasDone = current.includes(task);
+      const next = wasDone ? current.filter((entry) => entry !== task) : [...current, task];
+
+      tx.update(seat, { completedTasks: next });
+      tx.update(gameRef(gameCode), { tasksCompleted: increment(wasDone ? -1 : 1) });
+      return next;
+    });
   } catch (error) {
     console.error('[tasks] could not save progress', error);
-    return false;
+    return null;
   }
 }
 

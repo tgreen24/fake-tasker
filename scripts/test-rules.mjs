@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import {
   doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs,
-  arrayUnion, arrayRemove, deleteField
+  runTransaction, increment, arrayUnion, arrayRemove, deleteField
 } from 'firebase/firestore';
 
 const CODE = 'AB12CD';
@@ -261,6 +261,50 @@ await check('the host can delete a seat belonging to somebody long gone',
 
 await check('a player cannot rewrite which seats were dealt',
   assertFails(updateDoc(doc(player, 'games', CODE), { dealtSeats: ['tyler'] })));
+
+// Completing a task is one transaction over two documents -- the private seat
+// holds the mark, the shared game holds the credit. Each half is allowed on its
+// own; this is the only check that they are allowed together, which is how the
+// app actually writes them.
+await check('a player can mark a task and credit the total in one transaction',
+  assertSucceeds(runTransaction(player, async (tx) => {
+    const seat = doc(player, 'games', CODE, 'players', PLAYER_SEAT);
+    await tx.get(seat);
+    tx.update(seat, { completedTasks: ['Dishes'] });
+    tx.update(doc(player, 'games', CODE), { tasksCompleted: increment(1) });
+  })));
+
+// The seat read is new: the old code only ever wrote. Seat reads are narrower
+// than seat writes on purpose -- the host may update any seat but may not read
+// one, or they could read the roles. So the host completing their own task is
+// the case that has to be proven rather than assumed.
+await check('the host can mark their own task in one transaction',
+  assertSucceeds(runTransaction(host, async (tx) => {
+    const seat = doc(host, 'games', CODE, 'players', HOST_SEAT);
+    await tx.get(seat);
+    tx.update(seat, { completedTasks: ['Dishes'] });
+    tx.update(doc(host, 'games', CODE), { tasksCompleted: increment(1) });
+  })));
+
+await check('the host still cannot read another seat inside a transaction',
+  assertFails(runTransaction(host, async (tx) => {
+    await tx.get(doc(host, 'games', CODE, 'players', PLAYER_SEAT));
+  })));
+
+// The host is the only principal that can write a seat it cannot read. That
+// asymmetry is deliberate -- reading would hand them the roles -- but it means
+// a host whose own seat is stamped with an account that is not theirs still
+// records task progress while never seeing any of it land.
+await check('the host can WRITE a seat it cannot READ',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE, 'players', PLAYER_SEAT), { completedTasks: ['Dishes'] })));
+
+await check('that transaction cannot smuggle in a host-only field',
+  assertFails(runTransaction(player, async (tx) => {
+    const seat = doc(player, 'games', CODE, 'players', PLAYER_SEAT);
+    await tx.get(seat);
+    tx.update(seat, { completedTasks: ['Dishes'] });
+    tx.update(doc(player, 'games', CODE), { tasksCompleted: increment(1), tasks: ['Anything'] });
+  })));
 
 await testEnv.cleanup();
 

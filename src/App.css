@@ -1415,3 +1415,38 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .round-length strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.debug-screen {
+  padding: 20px 16px 40px;
+  min-height: 100vh;
+  background: #14161c;
+  color: #e8eaf0;
+}
+
+.debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.debug-actions button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #3a3f4b;
+  background: #232733;
+  color: #e8eaf0;
+  font-size: 0.9rem;
+}
+
+.debug-report {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  background: #0f1116;
+  border: 1px solid #2a2e39;
+  border-radius: 8px;
+  padding: 12px;
+  user-select: text;
+}

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  addTaskProgress, callMeeting, clearSabotage, endRound, publishFinishTime,
-  recordKill, setCompletedTasks, startSabotage, undoKill
+  callMeeting, clearSabotage, endRound, publishFinishTime,
+  recordKill, startSabotage, toggleTaskCompletion, undoKill
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
-import { deriveRoundState, toggledTaskList } from '../game/roundState';
+import { deriveRoundState } from '../game/roundState';
 import { currentUid } from '../firebase';
 import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
 import { useNow } from './useNow';
@@ -32,8 +32,29 @@ export function useCountdown(gameCode) {
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
   const [blended, setBlended] = useState(false);
+  // A tap that has not come back yet. Completing is a toggle decided from the
+  // server, so a second tap on the same task while the first is still in the
+  // air reads as "undo" -- and tapping again to make sure it registered is
+  // exactly what somebody does when marking has been unreliable.
+  const inFlight = useRef(new Set());
+  // What our own writes actually did, which outranks the listener. Nobody else
+  // ever writes your task list, so the list a write hands back is the truth
+  // even when the role listener has gone quiet and the screen is showing a
+  // stale copy. Without this a stalled listener leaves a completed task
+  // looking undone, and completing is a toggle read from the server -- so
+  // tapping the thing that looks undone would quietly un-complete it.
+  const [ownTasks, setOwnTasks] = useState(null);
 
   const round = useMemo(() => deriveRoundState(gameData, playerName, currentUid(), privateData), [gameData, playerName, privateData]);
+
+  // A fresh deal wipes the list on the server, so our copy of it stops being
+  // the truth at exactly that moment.
+  const roundStartedAt = round.roundStartedAt;
+  useEffect(() => {
+    setOwnTasks(null);
+  }, [roundStartedAt]);
+
+  const completedTasks = ownTasks || round.completedTasks;
 
   const introKind = !gameData
     ? null
@@ -75,13 +96,17 @@ export function useCountdown(gameCode) {
 
   const actions = useMemo(() => ({
     toggleTask: async (task) => {
-      if (round.tasksBlocked) return;
+      if (round.tasksBlocked || inFlight.current.has(task)) return;
+      inFlight.current.add(task);
 
-      const nextCompleted = toggledTaskList(round.completedTasks, task);
-      const delta = nextCompleted.length - round.completedTasks.length;
+      // The list comes back from the write itself, decided on the server, so
+      // what we act on next is what actually landed rather than what the
+      // screen believed a moment ago.
+      const nextCompleted = await toggleTaskCompletion(gameCode, playerName, task)
+        .finally(() => inFlight.current.delete(task));
+      if (!nextCompleted) return;
 
-      if (!(await setCompletedTasks(gameCode, playerName, nextCompleted))) return;
-      await addTaskProgress(gameCode, delta);
+      setOwnTasks(nextCompleted);
 
       const justFinished = round.tasks.length > 0 && nextCompleted.length >= round.tasks.length;
       if (justFinished && !gameData?.finishedAt?.[playerName]) {
@@ -117,7 +142,7 @@ export function useCountdown(gameCode) {
 
   return {
     state: {
-      ...round, playerName,
+      ...round, completedTasks, playerName,
       showIntro,
       introKind,
       countdown: countdown === null ? OPENING_COUNTDOWN_SECONDS : countdown,

@@ -6,6 +6,7 @@ import JoinGame from './JoinGame';
 import JoinByLink from './JoinByLink';
 import Countdown from './Countdown';
 import GameOver from './GameOver';
+import Debug from './Debug';
 import VotingPage from './VotingPage';
 import { useAuthReady } from './hooks/useAuthReady';
 import './App.css';
@@ -46,6 +47,7 @@ function App() {
         <Route path="/countdown/:gameCode" element={<Countdown />} />
         <Route path="/gameover/:gameCode" element={<GameOver />} />
         <Route path="/voting/:gameCode" element={<VotingPage />} />
+        <Route path="/debug" element={<Debug />} />
       </Routes>
     </Router>
   );
