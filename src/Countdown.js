@@ -7,6 +7,7 @@ import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import { roleName, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
+import ConfirmButton from './components/ConfirmButton';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -182,7 +183,12 @@ function Countdown() {
                 </button>
               )}
               {isCreator && (
-                <button className="end-game-btn" onClick={actions.endRound}>End Game Round</button>
+                <ConfirmButton
+                  className="end-game-btn"
+                  label="End Game Round"
+                  confirmLabel="Tap again to end the round"
+                  onConfirm={actions.endRound}
+                />
               )}
             </div>
 

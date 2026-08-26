@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  closeMeeting, markKilledDuringMeeting, publishOwnRole, submitVote as writeVote
+  closeMeeting, markKilledDuringMeeting, submitVote as writeVote
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
@@ -10,6 +10,7 @@ import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { roleName } from '../game/terminology';
 import { usePrivateRole } from './usePrivateRole';
+import { usePublishOutRoles } from './usePublishOutRoles';
 
 const TYPEWRITER_MS = 40;
 const VERDICT_DELAY_MS = 700;
@@ -54,6 +55,8 @@ export function useMeeting(gameCode) {
   const [secondsLeft, setSecondsLeft] = useState(null);
 
   const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid(), privateData), [gameData, playerName, privateData]);
+
+  usePublishOutRoles(gameCode, gameData, playerName, privateData);
   const displayedResult = useTypewriter(meeting.votingResult);
   const verdictText = meeting.ejected
     ? (meeting.ejectedWasImposter
@@ -105,17 +108,6 @@ export function useMeeting(gameCode) {
     );
   }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles, gameData, playerName]);
 
-  // Once you are out your role is public, and after the schema change you are
-  // the only one who can still read it -- so you publish it, and the verdict
-  // follows from the counts everyone can see.
-  const myRole = meeting.role;
-  const iWasEjected = meeting.ejected === playerName;
-  const myRolePublished = !!gameData?.revealed?.[playerName];
-
-  useEffect(() => {
-    if (!iWasEjected || !myRole || myRolePublished) return;
-    publishOwnRole(gameCode, playerName, myRole);
-  }, [iWasEjected, myRole, myRolePublished, gameCode, playerName]);
 
   const actions = useMemo(() => ({
     selectVote: setSelectedVote,

@@ -11,6 +11,7 @@ import { useNow } from './useNow';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { usePrivateRole } from './usePrivateRole';
+import { usePublishOutRoles } from './usePublishOutRoles';
 
 const OPENING_COUNTDOWN_SECONDS = 3;
 const REVEAL_HOLD_MS = 3800;
@@ -28,6 +29,7 @@ export function useCountdown(gameCode) {
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
   const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
+  usePublishOutRoles(gameCode, gameData, playerName, privateData);
 
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
