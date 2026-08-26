@@ -212,3 +212,36 @@ describe('a player leaving', () => {
     expect(decideOutcomeFromCounts(stranded)).toBeNull();
   });
 });
+
+// Seen in a real game: the only traitor was exiled and closed the tab, so the
+// role nobody else held was never published and the round could not be ended
+// by any means. Finishing the tasks does not depend on knowing who was what.
+describe('a round that nobody can account for can still be won on tasks', () => {
+  const stranded = (tasksCompleted) => ({
+    players: ['tyler', 'sam', 'kai', 'rae'],
+    imposterCount: 1,
+    tasksPerCrewmate: 2,
+    killList: ['tyler'],
+    revealed: {},
+    tasksCompleted
+  });
+
+  test('the round is still undecided while tasks are outstanding', () => {
+    expect(decideOutcomeFromCounts(stranded(3))).toBeNull();
+  });
+
+  test('finishing every task ends it, with the exile still unaccounted for', () => {
+    expect(decideOutcomeFromCounts(stranded(6))).toBe('Crewmates');
+  });
+
+  test('an unaccounted player still cannot hand the round to the traitors', () => {
+    expect(decideOutcomeFromCounts({
+      players: ['tyler', 'sam'],
+      imposterCount: 1,
+      tasksPerCrewmate: 2,
+      killList: ['sam'],
+      revealed: {},
+      tasksCompleted: 0
+    })).toBeNull();
+  });
+});

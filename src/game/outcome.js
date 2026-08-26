@@ -58,13 +58,22 @@ export function taskProgress(gameData) {
 // Returns 'Crewmates' | 'Imposters' | null, using only what everyone can see.
 export function decideOutcomeFromCounts(gameData) {
   const { traitors, taskers, unaccounted } = livingCounts(gameData);
-  if (unaccounted > 0) return null;
+  const { done, goal } = taskProgress(gameData);
+  const tasksFinished = goal > 0 && done >= goal;
+
+  // Who is still what cannot be worked out until everyone out has had their
+  // role published, and guessing would end rounds early. Finishing the tasks
+  // is the one victory that never needed to know: they are either all done or
+  // they are not. That matters because the player who owes the reveal may be
+  // the one who has gone -- an exiled traitor who closed the tab owes a role
+  // nobody else holds, and without this the round could never end at all. A
+  // traitor is dealt no tasks, so their leaving cannot put the goal out of
+  // reach either.
+  if (unaccounted > 0) return tasksFinished ? 'Crewmates' : null;
 
   if (traitors === 0) return 'Crewmates';
   if (traitors >= taskers) return 'Imposters';
-
-  const { done, goal } = taskProgress(gameData);
-  if (goal > 0 && done >= goal) return 'Crewmates';
+  if (tasksFinished) return 'Crewmates';
 
   return null;
 }
