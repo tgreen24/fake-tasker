@@ -13,8 +13,10 @@ export function useGameOver(gameCode) {
   const navigate = useNavigate();
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
-  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
-  usePublishOwnRole(gameCode, gameData, playerName, privateData?.role);
+  const { privateData } = usePrivateRole(gameCode, playerName);
+  usePublishOwnRole(
+    gameCode, gameData, playerName, privateData?.role, privateData?.completedTasks?.length
+  );
   const [errorMessage, setErrorMessage] = useState('');
 
   const summary = useMemo(

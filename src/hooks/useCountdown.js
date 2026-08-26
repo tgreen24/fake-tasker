@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  addTaskProgress, callMeeting, clearSabotage, endRound,
+  addTaskProgress, callMeeting, clearSabotage, endRound, publishFinishTime,
   recordKill, setCompletedTasks, startSabotage, undoKill
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
@@ -82,6 +82,11 @@ export function useCountdown(gameCode) {
 
       if (!(await setCompletedTasks(gameCode, playerName, nextCompleted))) return;
       await addTaskProgress(gameCode, delta);
+
+      const justFinished = round.tasks.length > 0 && nextCompleted.length >= round.tasks.length;
+      if (justFinished && !gameData?.finishedAt?.[playerName]) {
+        await publishFinishTime(gameCode, playerName);
+      }
     },
 
     toggleKill: async (crewmate) => {
@@ -108,7 +113,7 @@ export function useCountdown(gameCode) {
     },
 
     clearMySabotage: () => clearSabotage(gameCode, playerName)
-  }), [gameCode, playerName, round, killCooldownLeft, sabotageCooldownLeft]);
+  }), [gameCode, playerName, round, killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt]);
 
   return {
     state: {

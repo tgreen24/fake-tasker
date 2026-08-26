@@ -2,6 +2,7 @@ import { hasReachableHost, isHost } from './host';
 import { assignColors } from './playerColor';
 import { decideOutcomeFromCounts, taskProgress } from './outcome';
 import { roleNameLower, roleNameLowerPlural } from './terminology';
+import { awardBadges, roundDurationMs } from './badges';
 
 const WIN_REASONS = {
   tasks: 'All tasks completed',
@@ -52,6 +53,9 @@ export function deriveGameOverState(gameData, playerName, uid, privateData) {
 
   return {
     roster: revealRoster(gameData),
+    badges: awardBadges(gameData),
+    colors: assignColors(gameData?.players || []),
+    roundMs: roundDurationMs(gameData),
     winReason: winReasonText(gameData),
     progress: taskProgress(gameData),
     winner,

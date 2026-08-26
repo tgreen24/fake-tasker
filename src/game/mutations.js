@@ -149,6 +149,11 @@ export async function startRound(gameCode, { roles, assignedTasks, imposterHisto
       tasksCompleted: 0,
       killCooldowns: {},
       sabotageCooldowns: {},
+      kills: {},
+      voteLog: [],
+      taskCounts: {},
+      finishedAt: {},
+      endedAt: deleteField(),
       gameStarted: true,
       gameEnded: false,
       meetingCalled: false,
@@ -185,6 +190,11 @@ export const endRound = (gameCode) => updateGame(gameCode, {
   sabotageCooldowns: {},
   revealed: {},
   tasksCompleted: 0,
+  kills: {},
+  voteLog: [],
+  taskCounts: {},
+  finishedAt: {},
+  endedAt: deleteField(),
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -201,6 +211,11 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   sabotageCooldowns: {},
   revealed: {},
   tasksCompleted: 0,
+  kills: {},
+  voteLog: [],
+  taskCounts: {},
+  finishedAt: {},
+  endedAt: deleteField(),
   voteDeadline: deleteField(),
   votingResult: deleteField(),
   resultUntil: deleteField(),
@@ -212,7 +227,7 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
 // ── round play ─────────────────────────────────────────────
 
 export const endGame = (gameCode, winner, winReason) =>
-  updateGame(gameCode, { gameEnded: true, winner, winReason });
+  updateGame(gameCode, { gameEnded: true, winner, winReason, endedAt: Date.now() });
 
 // Kill and cooldown land in one write, so a cooldown cannot be lost by the
 // second write failing after the first succeeded.
@@ -220,6 +235,7 @@ export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds, vict
   updateGame(gameCode, {
     killList: arrayUnion(crewmate),
     [`revealed.${crewmate}`]: victimRole,
+    [`kills.${crewmate}`]: playerName,
     [`killCooldowns.${playerName}`]: cooldownExpiryFor(cooldownSeconds)
   });
 
@@ -227,6 +243,7 @@ export const undoKill = (gameCode, crewmate, playerName) =>
   updateGame(gameCode, {
     killList: arrayRemove(crewmate),
     [`revealed.${crewmate}`]: deleteField(),
+    [`kills.${crewmate}`]: deleteField(),
     [`killCooldowns.${playerName}`]: deleteField()
   });
 
@@ -234,6 +251,23 @@ export const undoKill = (gameCode, crewmate, playerName) =>
 // it public anyway and nobody else will be able to read it.
 export const publishOwnRole = (gameCode, playerName, role) =>
   updateGame(gameCode, { [`revealed.${playerName}`]: role });
+
+// Task progress lives in a document only its owner can read, so the counts the
+// badges need have to be published by each player themselves.
+export const publishTaskCount = (gameCode, playerName, done) =>
+  updateGame(gameCode, { [`taskCounts.${playerName}`]: done });
+
+// Both facts in one write. Every player publishes at the same moment when a
+// round ends, and each write is a snapshot delivered to everybody -- so two
+// writes each is quadratic reads for no reason.
+export const publishOwnSummary = (gameCode, playerName, role, done) =>
+  updateGame(gameCode, {
+    [`revealed.${playerName}`]: role,
+    ...(typeof done === 'number' ? { [`taskCounts.${playerName}`]: done } : {})
+  });
+
+export const publishFinishTime = (gameCode, playerName) =>
+  updateGame(gameCode, { [`finishedAt.${playerName}`]: Date.now() });
 
 // One shared total rather than a count per player: a traitor having no task
 // count would identify them.
@@ -295,10 +329,13 @@ export async function callMeeting(gameCode, playerName) {
 export const submitVote = (gameCode, playerName, vote) =>
   updateGame(gameCode, { [`votes.${playerName}`]: vote });
 
-export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, roles, gameDataForOutcome) {
+export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, roles, gameDataForOutcome, killerName) {
   const ok = await updateGame(gameCode, {
     killList: nextKillList,
-    [`revealed.${crewmate}`]: roles[crewmate]
+    [`revealed.${crewmate}`]: roles[crewmate],
+    // Firestore rejects undefined outright, which would fail the whole write
+    // and silently lose the kill rather than just the attribution.
+    ...(killerName ? { [`kills.${crewmate}`]: killerName } : {})
   });
   if (!ok) return false;
 
@@ -332,6 +369,10 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
       if (!force && !shouldResolveMeeting(data)) return;
 
       const { message, votedOut } = resolveVote(data);
+      const alive = (data.players || []).filter((p) => !(data.killList || []).includes(p));
+      const castThisMeeting = Object.fromEntries(
+        Object.entries(data.votes || {}).filter(([voter]) => alive.includes(voter))
+      );
       const killList = data.killList || [];
       const nextKillList = votedOut ? [...killList, votedOut] : killList;
 
@@ -340,6 +381,12 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
       const winner = votedOut ? null : decideOutcomeFromCounts(data);
 
       tx.update(gameRef(gameCode), {
+        // Appended rather than unioned: two meetings can genuinely produce the
+        // same tally, and arrayUnion would silently drop the second.
+        voteLog: [
+          ...(data.voteLog || []),
+          { caller: data.meetingCaller || null, votes: castThisMeeting, exiled: votedOut || null }
+        ],
         meetingCalled: false,
         votingResult: message,
         ejected: votedOut || deleteField(),

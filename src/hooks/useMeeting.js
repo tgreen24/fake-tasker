@@ -45,7 +45,7 @@ function useTypewriter(text, delayMs = 0) {
 export function useMeeting(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
-  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
+  const { privateData } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
 
   const [selectedVote, setSelectedVote] = useState('');
@@ -101,9 +101,9 @@ export function useMeeting(gameCode) {
     setKillDialogOpen(false);
     setSelectedKillPlayer('');
     await markKilledDuringMeeting(
-      gameCode, selectedKillPlayer, nextKillList, meeting.roles, gameData
+      gameCode, selectedKillPlayer, nextKillList, meeting.roles, gameData, playerName
     );
-  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles, gameData]);
+  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles, gameData, playerName]);
 
   // Once you are out your role is public, and after the schema change you are
   // the only one who can still read it -- so you publish it, and the verdict

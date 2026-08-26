@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useGameOver } from './hooks/useGameOver';
 import ConnectionBanner from './components/ConnectionBanner';
 import RevealRoster from './components/RevealRoster';
+import AwardList from './components/AwardList';
+import { formatClock } from './game/playerColor';
 import { teamName } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 
@@ -14,7 +16,7 @@ function GameOver() {
     return <div className="gameover-screen"><ConnectionBanner connected={connected} />Loading…</div>;
   }
 
-  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason } = state;
+  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason, badges, roundMs, colors } = state;
 
   return (
     <div className="gameover-screen">
@@ -39,7 +41,15 @@ function GameOver() {
 
           <h2 className="player-result reveal-fade">{role ? (playerWon ? 'You Win!' : 'You Lose!') : ''}</h2>
 
+          {roundMs > 0 && (
+            <p className="round-length">
+              Round lasted <strong>{formatClock(Math.round(roundMs / 1000))}</strong>
+            </p>
+          )}
+
           <RevealRoster roster={roster} winner={winner} />
+
+          <AwardList badges={badges} colors={colors} />
 
           {errorMessage && <p className="error-message">{errorMessage}</p>}
 
