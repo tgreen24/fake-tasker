@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { currentUid, db } from './firebase';
-import { loadSession, lastExit } from './session';
+import { loadSession, lastExit, sessionSource } from './session';
 import { roleDiagnostics, resetRoleDiagnostics } from './diagnostics';
 
 // Unlinked on purpose. Everything here is already yours -- your account, your
@@ -46,6 +46,7 @@ function Debug() {
     `player: ${session?.playerName || '(none)'}`,
     `game: ${session?.gameCode || '(none)'}`,
     `uid: ${uid || '(signed out)'}`,
+    `identity from: ${sessionSource()}`,
     '',
     `role listener: ${JSON.stringify(roleDiagnostics(), null, 2)}`,
     '',

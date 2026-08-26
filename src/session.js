@@ -36,6 +36,17 @@ export function loadSession() {
   return readFrom(sessionStorage) || readFrom(localStorage);
 }
 
+// Which copy the identity came from. In a normal browser these agree. In a
+// pile of private tabs they do not: those tabs share one localStorage, so a
+// tab that never joined a game falls back to whoever joined most recently.
+// Worth saying out loud on a diagnostics page rather than quietly reporting
+// the wrong player.
+export function sessionSource() {
+  if (readFrom(sessionStorage)) return 'this tab';
+  if (readFrom(localStorage)) return 'SHARED FALLBACK — may be a different player';
+  return 'none';
+}
+
 export function clearSession() {
   try {
     sessionStorage.removeItem(KEY);
