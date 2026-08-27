@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { attemptJoin } from './game/joinGameFlow';
 import { saveSession } from './session';
+import { withTimeout, isTimeout } from './withTimeout';
 
 function JoinGame() {
   const [gameCode, setGameCode] = useState('');
@@ -24,7 +25,7 @@ function JoinGame() {
     setErrorMessage('');
 
     try {
-      const result = await attemptJoin(gameCode, playerName);
+      const result = await withTimeout(attemptJoin(gameCode, playerName));
       if (result.error) {
         setErrorMessage(result.error);
         return;
@@ -34,7 +35,11 @@ function JoinGame() {
       navigate(`/lobby/${result.code}`, { state: { playerName: result.name } });
     } catch (error) {
       console.error('Error joining game: ', error);
-      setErrorMessage('Something went wrong. Please try again.');
+      setErrorMessage(
+        isTimeout(error)
+          ? 'That is taking longer than it should. Check your connection and tap Join Game again.'
+          : 'Something went wrong. Please try again.'
+      );
     } finally {
       setJoining(false);
     }

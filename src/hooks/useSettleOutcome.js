@@ -19,7 +19,13 @@ export function useSettleOutcome(gameCode, gameData) {
     const winner = decideOutcomeFromCounts(gameData);
     if (!winner || settling.current) return;
 
+    // Latched on the attempt, released if the attempt failed. Latching on the
+    // attempt alone meant one refused write took this client out of settling
+    // for good, and the only thing that clears the latch is the round ending --
+    // which is the very thing that could no longer happen.
     settling.current = true;
-    endGame(gameCode, winner, winReasonFor(gameData, winner));
+    endGame(gameCode, winner, winReasonFor(gameData, winner)).then((saved) => {
+      if (!saved) settling.current = false;
+    });
   }, [gameCode, gameData]);
 }

@@ -1,7 +1,7 @@
 import {
   buildRound, calculateWeights, selectImposters, assignTasksEvenly
 } from './roleAssignment';
-import { deriveLobbyState, validateNewTask, validateStart } from './lobbyState';
+import { MIN_PLAYERS, deriveLobbyState, validateNewTask, validateStart } from './lobbyState';
 
 const PLAYERS = ['tyler', 'sam', 'kai', 'rae'];
 const TASKS = ['Dishes', 'Sweep', 'Fold', 'Water', 'Sort'];
@@ -125,7 +125,20 @@ describe('validateStart', () => {
   test('accepts a valid setup', () => expect(validateStart(ok)).toBeNull());
 
   test('rejects a lone player', () => {
-    expect(validateStart({ ...ok, players: ['tyler'] })).toMatch(/at least 2 players/);
+    expect(validateStart({ ...ok, players: ['tyler'] })).toMatch(
+      new RegExp(`at least ${MIN_PLAYERS} players`)
+    );
+  });
+
+  // Two players is one traitor against one tasker, which the outcome rules
+  // settle as a traitor win on the round's first snapshot -- the host taps
+  // Start and everybody lands on the game over screen.
+  test('rejects two players, which would end the moment it began', () => {
+    expect(validateStart({ ...ok, players: ['tyler', 'sam'] })).toBeTruthy();
+  });
+
+  test('allows three', () => {
+    expect(validateStart({ ...ok, players: ['tyler', 'sam', 'kai'] })).toBeNull();
   });
 
   test('rejects too few tasks for the per-crewmate setting', () => {

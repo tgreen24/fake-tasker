@@ -35,8 +35,26 @@ describe('shouldResolveMeeting', () => {
     expect(shouldResolveMeeting(data, NOW)).toBe(true);
   });
 
-  test('ignores a deadline written by a badly skewed clock', () => {
+  // This used to resolve, on the reasoning that a nonsense deadline should not
+  // be allowed to hang a vote. It hangs nothing: the host can force a vote to
+  // end. What it did instead was let one phone set to the wrong time close
+  // every meeting the instant it opened, before anybody had voted -- and a vote
+  // that never happened cannot be got back. So it waits now.
+  test('waits rather than trust a deadline written by a badly skewed clock', () => {
     const data = meeting({ voteDeadline: NOW + VOTE_DURATION_MS * 10, votes: {} });
+    expect(shouldResolveMeeting(data, NOW)).toBe(false);
+  });
+
+  test('a skewed deadline still cannot hold up a vote everybody has cast', () => {
+    const data = meeting({
+      voteDeadline: NOW + VOTE_DURATION_MS * 10,
+      votes: { tyler: 'skip', sam: 'skip', kai: 'skip' }
+    });
+    expect(shouldResolveMeeting(data, NOW)).toBe(true);
+  });
+
+  test('a deadline that has genuinely passed still resolves', () => {
+    const data = meeting({ voteDeadline: NOW - 1, votes: {} });
     expect(shouldResolveMeeting(data, NOW)).toBe(true);
   });
 

@@ -51,15 +51,24 @@ function Countdown() {
           <div className="game-content">
             <ScreenHeader title={playerName} status="Game in progress" tone="success" />
 
-            <h2
-              className={`role-announcement role-reveal ${isDead ? role : blended ? 'Crewmate' : role || ''}`}
-            >
-              {isDead
-                ? `You are a Dead ${roleName(role)}`
-                : role === 'Imposter'
-                ? `You are the ${roleName('Imposter')}!`
-                : `You are a ${roleName('Crewmate')}!`}
-            </h2>
+            {role ? (
+              <h2
+                className={`role-announcement role-reveal ${isDead ? role : blended ? 'Crewmate' : role}`}
+              >
+                {isDead
+                  ? `You are a Dead ${roleName(role)}`
+                  : role === 'Imposter'
+                  ? `You are the ${roleName('Imposter')}!`
+                  : `You are a ${roleName('Crewmate')}!`}
+              </h2>
+            ) : (
+              // Falling through to the tasker line here would state a role we do
+              // not have, and the one it would mislead worst is the traitor.
+              <div className="role-unavailable" role="alert">
+                <h2>Your role has not arrived</h2>
+                <p>Reload the page. Keep your screen to yourself until it does.</p>
+              </div>
+            )}
 
             {role === 'Crewmate' && !tasksBlocked && (
               <div>

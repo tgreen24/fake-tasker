@@ -4,6 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { createGame } from './game/mutations';
 import { saveSession } from './session';
+import { withTimeout, isTimeout } from './withTimeout';
 
 const CODE_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const CODE_LENGTH = 6;
@@ -34,29 +35,31 @@ function Home() {
     setErrorMessage('');
 
     try {
-      let gameCode = null;
-      for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
-        const candidate = generateGameCode();
-        const existing = await getDoc(doc(db, 'games', candidate));
-        if (!existing.exists()) {
-          gameCode = candidate;
-          break;
+      const gameCode = await withTimeout((async () => {
+        for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
+          const candidate = generateGameCode();
+          const existing = await getDoc(doc(db, 'games', candidate));
+          if (!existing.exists()) {
+            await createGame(candidate, name);
+            return candidate;
+          }
         }
-      }
+        return null;
+      })());
 
       if (!gameCode) {
         setErrorMessage('Every code we tried was taken. Please try again.');
         return;
       }
 
-      await createGame(gameCode, name);
-
       saveSession(gameCode, name);
       navigate(`/lobby/${gameCode}`, { state: { playerName: name } });
     } catch (error) {
       console.error('Error creating game:', error);
       setErrorMessage(
-        error?.code === 'permission-denied'
+        isTimeout(error)
+          ? "That is taking longer than it should. Check your connection and tap Create Game again."
+          : error?.code === 'permission-denied'
           ? 'Your app is out of date. Please reload the page.'
           : 'Could not create a game right now. Please try again.'
       );

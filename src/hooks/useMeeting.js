@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   closeMeeting, markKilledDuringMeeting, submitVote as writeVote
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
-import { VOTE_DURATION_MS, shouldResolveMeeting } from '../voteLogic';
+import {
+  VOTE_DURATION_MS, alivePlayersOf, shouldResolveMeeting, votesCastBy
+} from '../voteLogic';
 import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
@@ -68,11 +70,32 @@ export function useMeeting(gameCode) {
   const { meetingCalled, voteDeadline, isCreator, players } = meeting;
   const myTurnDelay = resolverDelayMs(players, playerName, isCreator);
 
+  // How long this client has actually watched the meeting. Elapsed local time
+  // rather than a comparison against a deadline somebody else's clock wrote,
+  // so a device set to the wrong time cannot end a vote the moment it opens.
+  const watchingSince = useRef(null);
+  useEffect(() => {
+    if (!meetingCalled) {
+      watchingSince.current = null;
+      return;
+    }
+    if (watchingSince.current === null) watchingSince.current = Date.now();
+  }, [meetingCalled]);
+
   useEffect(() => {
     if (!meetingCalled) return undefined;
 
     const attempt = () => {
       if (document.hidden) return;
+
+      // Everybody having voted is a fact any client can check. Running out of
+      // time is not, so only a client that has sat through the whole vote is
+      // allowed to be the one who calls it.
+      const alive = alivePlayersOf(gameData);
+      const everyoneVoted = alive.length === 0 || votesCastBy(gameData, alive) >= alive.length;
+      const watchedFor = watchingSince.current === null ? 0 : Date.now() - watchingSince.current;
+      if (!everyoneVoted && watchedFor < VOTE_DURATION_MS) return;
+
       if (!shouldResolveMeeting(gameData)) return;
       closeMeeting(gameCode);
     };

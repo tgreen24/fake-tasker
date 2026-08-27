@@ -12,11 +12,17 @@ export function votesCastBy(gameData, alive) {
   return alive.filter((player) => votes[player] !== undefined).length;
 }
 
+// The deadline is written in the calling phone's clock and read in everybody
+// else's. A deadline further away than the vote is long says those two clocks
+// disagree, not that the vote is over -- and closing on that would end the
+// meeting the instant it opened, before anybody had voted. Waiting is the safe
+// way to be wrong here: a vote that overstays can be ended by the host, and one
+// that never happened cannot be got back.
 export function voteDeadlinePassed(gameData, now = Date.now()) {
   const deadline = gameData?.voteDeadline;
   if (!deadline) return false;
-  if (now >= deadline) return true;
-  return deadline - now > VOTE_DURATION_MS;
+  if (deadline - now > VOTE_DURATION_MS) return false;
+  return now >= deadline;
 }
 
 export function shouldResolveMeeting(gameData, now = Date.now()) {

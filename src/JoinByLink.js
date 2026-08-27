@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { attemptJoin } from './game/joinGameFlow';
 import { loadSession, saveSession } from './session';
+import { withTimeout, isTimeout } from './withTimeout';
 
 // Arrived from a link in a group chat: the code is in the URL, the name is not.
 function JoinByLink() {
@@ -27,7 +28,7 @@ function JoinByLink() {
     setErrorMessage('');
 
     try {
-      const result = await attemptJoin(code, playerName);
+      const result = await withTimeout(attemptJoin(code, playerName));
       if (result.error) {
         setErrorMessage(result.error);
         return;
@@ -36,7 +37,11 @@ function JoinByLink() {
       navigate(`/lobby/${result.code}`, { state: { playerName: result.name } });
     } catch (error) {
       console.error('Error joining game:', error);
-      setErrorMessage('Could not join that game. Please try again.');
+      setErrorMessage(
+        isTimeout(error)
+          ? 'That is taking longer than it should. Check your connection and try again.'
+          : 'Could not join that game. Please try again.'
+      );
     } finally {
       setJoining(false);
     }

@@ -7,6 +7,7 @@ import {
 import { deriveLobbyState, validateNewTask, validateStart } from '../game/lobbyState';
 import { buildRound } from '../game/roleAssignment';
 import { currentUid } from '../firebase';
+import { withTimeout, isTimeout } from '../withTimeout';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 
@@ -50,10 +51,20 @@ export function useLobby(gameCode) {
 
     setStarting(true);
     setErrorMessage('');
-    const ok = await startRound(gameCode, buildRound(lobby), gameData?.playerUids || {});
-    setStarting(false);
-
-    if (!ok) setErrorMessage('Could not start the game. Check your connection and try again.');
+    try {
+      const ok = await withTimeout(
+        startRound(gameCode, buildRound(lobby), gameData?.playerUids || {})
+      );
+      if (!ok) setErrorMessage('Could not start the game. Check your connection and try again.');
+    } catch (error) {
+      setErrorMessage(
+        isTimeout(error)
+          ? 'That is taking longer than it should. Check your connection and tap Start Game again.'
+          : 'Could not start the game. Check your connection and try again.'
+      );
+    } finally {
+      setStarting(false);
+    }
   }, [gameCode, lobby, starting, gameData?.playerUids]);
 
   const finishGame = useCallback(async () => {

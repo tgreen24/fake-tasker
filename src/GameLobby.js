@@ -10,6 +10,7 @@ import TaskEditor from './components/TaskEditor';
 import { TASK_PACKS } from './game/taskPacks';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
+import { MIN_PLAYERS } from './game/lobbyState';
 
 function GameLobby() {
   const { gameCode } = useParams();
@@ -71,7 +72,7 @@ function GameLobby() {
           <div className="creator-controls">
             <button
               onClick={actions.startGame}
-              disabled={players.length < 2 || starting}
+              disabled={players.length < MIN_PLAYERS || starting}
               className="start-game-btn"
             >
               {starting ? 'Starting…' : 'Start Game'}
