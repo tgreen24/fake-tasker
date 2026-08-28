@@ -34,11 +34,16 @@ if (appCheckSiteKey) {
   });
 }
 
-// Firestore's default WebChannel transport is known to stall behind some
-// proxies and on iOS Safari -- the stream goes quiet without erroring, so the
-// client keeps stale data. Auto-detect falls back to long polling when the
-// environment looks like one of those.
-const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
+// Firestore's default WebChannel transport stalls on iOS: the stream goes
+// quiet without erroring and the client sits on stale data believing it is
+// connected. Auto-detect was not enough, because it chooses a transport once
+// when the connection is set up and cannot tell that the stream went quiet
+// twenty minutes later -- which is how a phone sat in a lobby, screen on and
+// wide awake, and never saw the round start.
+//
+// Long polling is chattier and reconnects far more readily. For a game played
+// by a houseful of phones, being told what happened beats saving requests.
+const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 const auth = getAuth(app);
 
 let signInPromise = null;

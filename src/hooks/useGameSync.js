@@ -4,6 +4,7 @@ import { doc, onSnapshot, getDocFromServer } from 'firebase/firestore';
 import { db } from '../firebase';
 import { routeForState } from '../gameRoute';
 import { recordExit } from '../session';
+import { withTimeout } from '../withTimeout';
 
 const ROUTE_TICK_MS = 1000;
 const MAX_BACKOFF_MS = 15000;
@@ -11,10 +12,18 @@ const OFFLINE_GRACE_MS = 3000;
 
 // A dropped listener calls the error handler and gets rebuilt. A *stalled* one
 // never does: the stream goes quiet, no error arrives, and the client sits on
-// stale data believing it is connected. iOS Safari does this after suspending a
-// tab. So we also watch how long it has been since a snapshot landed.
-const STALE_RESYNC_MS = 30000;
-const STALE_REBUILD_MS = 60000;
+// stale data believing it is connected.
+//
+// This happens with the screen on and the page in the foreground, so no
+// visibility event is ever coming to the rescue and this clock is the only
+// thing that will notice. It used to wait thirty seconds before trying
+// anything, which is far longer than anyone waits before deciding the game is
+// broken and reloading the page -- so the recovery never got to run.
+const STALE_MS = 8000;
+
+// Reading a document through a wedged connection is the least likely thing to
+// work, and it can hang for as long as it likes, so give up and rebuild.
+const RESYNC_TIMEOUT_MS = 6000;
 
 // How long to wait for the server to settle whether a game exists before
 // accepting that it does not. Only ever applies to a game this client has
@@ -60,6 +69,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     let backoff = 1000;
     let lastSnapshotAt = Date.now();
     let missingSince = null;
+    let resyncing = false;
 
     const gameRef = doc(db, 'games', gameCode);
 
@@ -149,28 +159,44 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
     };
 
+    // Self-cleaning, so it does not matter who calls it or what was already
+    // pending. A failed listener schedules its own retry, and the staleness
+    // clock rebuilds on its own account; without this the two race and leave a
+    // live listener behind with nothing referencing it.
     function subscribe() {
       if (cancelled) return;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
       lastSnapshotAt = Date.now();
       unsubscribe = onSnapshot(gameRef, receive, fail);
     }
 
+    // Bounded, and never more than one at a time: an unbounded read on a dead
+    // connection used to hang while the tick started another one every second.
     const resync = async () => {
-      if (cancelled || document.hidden) return;
+      if (cancelled || document.hidden || resyncing) return;
+      resyncing = true;
       try {
-        receive(await getDocFromServer(gameRef));
+        receive(await withTimeout(getDocFromServer(gameRef), RESYNC_TIMEOUT_MS));
       } catch (error) {
-        if (cancelled) return;
-        console.warn('[useGameSync] forced resync failed', error);
-        markConnected(false);
+        if (!cancelled) {
+          console.warn('[useGameSync] forced resync failed', error);
+          markConnected(false);
+        }
+      } finally {
+        resyncing = false;
       }
     };
 
     const rebuild = () => {
       if (cancelled) return;
       console.warn('[useGameSync] listener went quiet, rebuilding it');
-      if (unsubscribe) unsubscribe();
-      unsubscribe = null;
       subscribe();
       resync();
     };
@@ -179,7 +205,8 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     const onForeground = () => {
       if (document.hidden) return;
       if (dataRef.current) routeRef.current(dataRef.current);
-      resync();
+      if (Date.now() - lastSnapshotAt > STALE_MS) rebuild();
+      else resync();
     };
 
     const tick = () => {
@@ -194,8 +221,15 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       }
 
       const quietFor = Date.now() - lastSnapshotAt;
-      if (quietFor > STALE_REBUILD_MS) rebuild();
-      else if (quietFor > STALE_RESYNC_MS || !connectedRef.current) resync();
+      if (quietFor > STALE_MS) {
+        // A silent stall produces no snapshots at all, so nothing has told the
+        // banner anything is wrong and the screen looks perfectly healthy while
+        // the connection is dead. Say so, then rebuild the stream.
+        markConnected(false);
+        rebuild();
+      } else if (!connectedRef.current) {
+        resync();
+      }
     };
 
     subscribe();

@@ -55,8 +55,19 @@ export function usePrivateRole(gameCode, playerName) {
       }
     };
 
+    // Self-cleaning for the same reason the game listener is: a failed listener
+    // schedules its own retry and the watchdog rebuilds on its own account, and
+    // the two must not both end up live.
     const subscribe = () => {
       if (cancelled) return;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
       lastActivity = Date.now();
       unsubscribe = onSnapshot(ref, receive, (error) => {
         // Reading somebody else's role is meant to fail; treat it as no role.
@@ -91,11 +102,6 @@ export function usePrivateRole(gameCode, playerName) {
       if (!receivedRef.current && quietFor > FIRST_SNAPSHOT_MS) resync();
       else if (quietFor > STALE_REBUILD_MS) {
         noteRoleRebuild();
-        if (retryTimer) {
-          clearTimeout(retryTimer);
-          retryTimer = null;
-        }
-        if (unsubscribe) unsubscribe();
         subscribe();
         resync();
       }
