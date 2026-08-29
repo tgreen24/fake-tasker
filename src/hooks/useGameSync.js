@@ -16,10 +16,18 @@ const OFFLINE_GRACE_MS = 3000;
 //
 // This happens with the screen on and the page in the foreground, so no
 // visibility event is ever coming to the rescue and this clock is the only
-// thing that will notice. It used to wait thirty seconds before trying
-// anything, which is far longer than anyone waits before deciding the game is
-// broken and reloading the page -- so the recovery never got to run.
-const STALE_MS = 8000;
+// thing that will notice.
+//
+// Two clocks, because silence has two meanings. A game document is quiet most
+// of the time -- nobody is joining, nobody has finished a task -- so time since
+// any data arrived says only that nothing has happened, and a cheap read is
+// enough to confirm we are not behind. Time since the *listener* last spoke is
+// the one that says the stream itself may be gone, and that wants rebuilding.
+//
+// Neither of them is a connection problem, so neither of them says a word to
+// the player. Only a read that actually fails does that.
+const STALE_PROBE_MS = 12000;
+const STALE_REBUILD_MS = 30000;
 
 // Reading a document through a wedged connection is the least likely thing to
 // work, and it can hang for as long as it likes, so give up and rebuild.
@@ -70,6 +78,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     let lastSnapshotAt = Date.now();
     let missingSince = null;
     let resyncing = false;
+    let lastListenerAt = Date.now();
 
     const gameRef = doc(db, 'games', gameCode);
 
@@ -174,7 +183,15 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         unsubscribe = null;
       }
       lastSnapshotAt = Date.now();
-      unsubscribe = onSnapshot(gameRef, receive, fail);
+      lastListenerAt = Date.now();
+      unsubscribe = onSnapshot(
+        gameRef,
+        (snapshot) => {
+          lastListenerAt = Date.now();
+          receive(snapshot);
+        },
+        fail
+      );
     }
 
     // Bounded, and never more than one at a time: an unbounded read on a dead
@@ -205,7 +222,7 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     const onForeground = () => {
       if (document.hidden) return;
       if (dataRef.current) routeRef.current(dataRef.current);
-      if (Date.now() - lastSnapshotAt > STALE_MS) rebuild();
+      if (Date.now() - lastListenerAt > STALE_PROBE_MS) rebuild();
       else resync();
     };
 
@@ -220,16 +237,17 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         return;
       }
 
-      const quietFor = Date.now() - lastSnapshotAt;
-      if (quietFor > STALE_MS) {
-        // A silent stall produces no snapshots at all, so nothing has told the
-        // banner anything is wrong and the screen looks perfectly healthy while
-        // the connection is dead. Say so, then rebuild the stream.
-        markConnected(false);
+      // Rebuilding is what brings live updates back, so it is driven by the
+      // stream's own silence rather than by nothing having happened. A read
+      // that keeps succeeding would otherwise leave a dead listener in place
+      // and quietly turn the whole game into a poll.
+      if (Date.now() - lastListenerAt > STALE_REBUILD_MS) {
         rebuild();
-      } else if (!connectedRef.current) {
-        resync();
+        return;
       }
+
+      const quietFor = Date.now() - lastSnapshotAt;
+      if (quietFor > STALE_PROBE_MS || !connectedRef.current) resync();
     };
 
     subscribe();
