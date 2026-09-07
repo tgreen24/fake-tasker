@@ -5,10 +5,11 @@ import {
 import { auth, db } from '../firebase';
 import { updateGame } from '../db';
 import { RESULT_DISPLAY_MS } from '../gameRoute';
-import { VOTE_DURATION_MS, resolveVote, shouldResolveMeeting } from '../voteLogic';
+import { VOTE_DURATION_MS, resolveVote, shouldResolveMeeting, validVotesOf } from '../voteLogic';
 import { decideOutcomeFromCounts } from './outcome';
 import {
-  SABOTAGE_COOLDOWN_SECONDS, cooldownExpiryFor, pauseCooldowns, resumeCooldowns
+  SABOTAGE_COOLDOWN_SECONDS, cooldownExpiryFor, frozenCooldownFor,
+  pauseCooldowns, resumeCooldowns
 } from './cooldown';
 
 import { GAME_LIFETIME_MS, MAX_PLAYERS } from './constants';
@@ -347,13 +348,28 @@ export async function callMeeting(gameCode, playerName) {
 export const submitVote = (gameCode, playerName, vote) =>
   updateGame(gameCode, { [`votes.${playerName}`]: vote });
 
-export async function markKilledDuringMeeting(gameCode, crewmate, nextKillList, roles, gameDataForOutcome, killerName) {
+// Marking somebody dead during a meeting is a correction: the traitor killed
+// them before it started and did not get to record it. So it costs the same
+// cooldown the kill itself would have, frozen for the rest of the meeting like
+// every other one -- otherwise forgetting to mark a kill is rewarded with a
+// free one the moment the meeting closes.
+//
+// One name added rather than the whole list rewritten from what this phone
+// last saw: the vote closing writes that list too, and either write landing
+// second used to undo the other.
+export async function markKilledDuringMeeting(gameCode, crewmate, roles, gameDataForOutcome, killerName) {
+  const cooldownSeconds = gameDataForOutcome?.killCooldown || 0;
+  const nextKillList = [...new Set([...(gameDataForOutcome?.killList || []), crewmate])];
+
   const ok = await updateGame(gameCode, {
-    killList: nextKillList,
+    killList: arrayUnion(crewmate),
     [`revealed.${crewmate}`]: roles[crewmate],
     // Firestore rejects undefined outright, which would fail the whole write
     // and silently lose the kill rather than just the attribution.
-    ...(killerName ? { [`kills.${crewmate}`]: killerName } : {})
+    ...(killerName ? { [`kills.${crewmate}`]: killerName } : {}),
+    ...(killerName && cooldownSeconds
+      ? { [`killCooldowns.${killerName}`]: frozenCooldownFor(cooldownSeconds) }
+      : {})
   });
   if (!ok) return false;
 
@@ -387,12 +403,12 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
       if (!force && !shouldResolveMeeting(data)) return;
 
       const { message, votedOut } = resolveVote(data);
-      const alive = (data.players || []).filter((p) => !(data.killList || []).includes(p));
-      const castThisMeeting = Object.fromEntries(
-        Object.entries(data.votes || {}).filter(([voter]) => alive.includes(voter))
-      );
+      const castThisMeeting = validVotesOf(data);
       const killList = data.killList || [];
-      const nextKillList = votedOut ? [...killList, votedOut] : killList;
+      // resolveVote will not name somebody already out, but the list this
+      // writes is the one the whole round is adjudicated from, so it does not
+      // rely on that: a name in it twice is a round that can never end.
+      const nextKillList = votedOut ? [...new Set([...killList, votedOut])] : killList;
 
       // The ejected player publishes their own role, so the winner cannot be
       // settled in this transaction -- it is decided once that lands.

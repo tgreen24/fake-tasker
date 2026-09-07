@@ -1,6 +1,6 @@
 import {
-  remainingCooldownSeconds, cooldownExpiryFor, pauseCooldowns, resumeCooldowns,
-  isTicking, SABOTAGE_COOLDOWN_SECONDS
+  remainingCooldownSeconds, cooldownExpiryFor, frozenCooldownFor,
+  pauseCooldowns, resumeCooldowns, isTicking, SABOTAGE_COOLDOWN_SECONDS
 } from './cooldown';
 
 const NOW = 1_000_000;
@@ -58,6 +58,17 @@ describe('a meeting does not serve the cooldown', () => {
     const meetingEnd = NOW + 200_000;
     const resumed = resumeCooldowns(paused, meetingEnd);
     expect(remainingCooldownSeconds(resumed.rae, MAX, meetingEnd + 40_000)).toBe(50);
+  });
+
+  // A kill recorded during the meeting is a correction to one made before it,
+  // so it costs the cooldown -- but the meeting must not serve any of it.
+  test('a cooldown incurred mid-meeting starts running when the meeting ends', () => {
+    const incurred = { rae: frozenCooldownFor(30) };
+    expect(remainingCooldownSeconds(incurred.rae, 30, NOW + 600_000)).toBe(30);
+    const meetingEnd = NOW + 600_000;
+    const resumed = resumeCooldowns(incurred, meetingEnd);
+    expect(isTicking(resumed.rae)).toBe(true);
+    expect(remainingCooldownSeconds(resumed.rae, 30, meetingEnd + 10_000)).toBe(20);
   });
 
   test('drops anyone whose cooldown had already run out', () => {

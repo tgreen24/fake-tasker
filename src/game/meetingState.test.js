@@ -42,6 +42,25 @@ describe('deriveMeetingState', () => {
     expect(deriveMeetingState(meeting(), 'sam', undefined, taskerDoc).myVote).toBeUndefined();
   });
 
+  test('names who the meeting is still waiting on', () => {
+    const s = deriveMeetingState(meeting({ votes: { tyler: 'skip' } }), 'tyler', undefined, traitorDoc);
+    expect(s.pendingVoters).toEqual(['sam', 'kai']);
+  });
+
+  test('asks a voter again when the player they voted for turns out to be dead', () => {
+    const data = meeting({ killList: ['kai'], votes: { sam: 'kai' } });
+    const s = deriveMeetingState(data, 'sam', 'uid-sam', taskerDoc);
+    expect(s.myVote).toBeUndefined();
+    expect(s.voidedVote).toBe('kai');
+    expect(s.pendingVoters).toEqual(['tyler', 'sam']);
+    expect(s.votesCast).toBe(0);
+  });
+
+  test('says nothing about a vote that still stands', () => {
+    const s = deriveMeetingState(meeting({ votes: { sam: 'tyler' } }), 'sam', undefined, taskerDoc);
+    expect(s.voidedVote).toBeNull();
+  });
+
   test('is not ended while the meeting runs', () => {
     expect(deriveMeetingState(meeting(), 'sam', undefined, taskerDoc).votingEnded).toBe(false);
   });

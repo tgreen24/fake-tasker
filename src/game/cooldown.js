@@ -25,6 +25,14 @@ export function cooldownExpiryFor(seconds, now = Date.now()) {
   return { until: now + seconds * 1000 };
 }
 
+// A cooldown incurred while a meeting is running, which is where corrections
+// to the dead list get made. Written frozen rather than ticking, so the
+// meeting does not serve it while nobody is playing -- closeMeeting starts it
+// running along with everybody else's.
+export function frozenCooldownFor(seconds) {
+  return { remainingMs: seconds * 1000 };
+}
+
 export function isTicking(entry) {
   return !!entry && typeof entry !== 'number' && entry.remainingMs == null;
 }

@@ -33,6 +33,19 @@ describe('livingCounts', () => {
     expect(livingCounts(game())).toEqual({ traitors: 1, taskers: 3, unaccounted: 0 });
   });
 
+  test('counts a name in the dead list once, however often it appears', () => {
+    const g = game({ killList: ['sam', 'sam'], revealed: { sam: 'Crewmate' } });
+    expect(livingCounts(g)).toEqual({ traitors: 1, taskers: 2, unaccounted: 0 });
+  });
+
+  test('a duplicated name cannot leave a round unadjudicatable', () => {
+    const g = game({
+      killList: ['sam', 'sam', 'kai'],
+      revealed: { sam: 'Crewmate', kai: 'Crewmate', tyler: 'Imposter' }
+    });
+    expect(decideOutcomeFromCounts(g)).toBe('Imposters');
+  });
+
   test('subtracts a tasker once their role is published', () => {
     const g = game({ killList: ['sam'], revealed: { sam: 'Crewmate' } });
     expect(livingCounts(g)).toMatchObject({ traitors: 1, taskers: 2 });

@@ -5,7 +5,7 @@ import {
 import { useSettleOutcome } from './useSettleOutcome';
 import { deriveMeetingState, resolverDelayMs, secondsUntil } from '../game/meetingState';
 import {
-  VOTE_DURATION_MS, alivePlayersOf, shouldResolveMeeting, votesCastBy
+  SKIP, VOTE_DURATION_MS, alivePlayersOf, shouldResolveMeeting, votesCastBy
 } from '../voteLogic';
 import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
@@ -57,6 +57,13 @@ export function useMeeting(gameCode) {
   const [secondsLeft, setSecondsLeft] = useState(null);
 
   const meeting = useMemo(() => deriveMeetingState(gameData, playerName, currentUid(), privateData), [gameData, playerName, privateData]);
+
+  // Selecting a card does not commit anything, so a selection can outlive the
+  // player it named -- the traitor's own correction takes them off the ballot,
+  // and a voter sent back to the ballot still has their old pick in hand. Read
+  // through the current ballot rather than trusted, or Submit stays lit for a
+  // player nobody may vote for.
+  const chosenVote = selectedVote === SKIP || meeting.ballot.includes(selectedVote) ? selectedVote : '';
 
   usePublishOutRoles(gameCode, gameData, playerName, privateData);
   const displayedResult = useTypewriter(meeting.votingResult);
@@ -116,20 +123,17 @@ export function useMeeting(gameCode) {
   }, [meetingCalled, voteDeadline]);
 
   const submitVote = useCallback(async () => {
-    if (!selectedVote || meeting.myVote) return;
-    await writeVote(gameCode, playerName, selectedVote);
-  }, [gameCode, playerName, selectedVote, meeting.myVote]);
+    if (!chosenVote || meeting.myVote) return;
+    await writeVote(gameCode, playerName, chosenVote);
+  }, [gameCode, playerName, chosenVote, meeting.myVote]);
 
   const confirmKill = useCallback(async () => {
     if (!selectedKillPlayer) return;
 
-    const nextKillList = [...meeting.deadPlayers, selectedKillPlayer];
     setKillDialogOpen(false);
     setSelectedKillPlayer('');
-    await markKilledDuringMeeting(
-      gameCode, selectedKillPlayer, nextKillList, meeting.roles, gameData, playerName
-    );
-  }, [gameCode, selectedKillPlayer, meeting.deadPlayers, meeting.roles, gameData, playerName]);
+    await markKilledDuringMeeting(gameCode, selectedKillPlayer, meeting.roles, gameData, playerName);
+  }, [gameCode, selectedKillPlayer, meeting.roles, gameData, playerName]);
 
 
   const actions = useMemo(() => ({
@@ -146,7 +150,7 @@ export function useMeeting(gameCode) {
     state: {
       ...meeting,
       playerName,
-      selectedVote,
+      selectedVote: chosenVote,
       selectedKillPlayer,
       killDialogOpen,
       secondsLeft,

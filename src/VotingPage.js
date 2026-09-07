@@ -27,6 +27,55 @@ function DeadPlayersList({ deadPlayers, colors }) {
   );
 }
 
+// The traitor's correction to the dead list, for a kill they made before the
+// meeting and did not get to record. It used to live only on the ballot, which
+// is the one screen a traitor leaves the moment they vote -- and the room
+// usually only works out somebody is unaccounted for once everyone has turned
+// up and voted. A traitor who is out themselves does not get it: they could
+// only have gone out to this vote, so there is nothing of theirs left to
+// correct.
+function MarkDeadAction({ role, isAlive, open, targets, selected, actions }) {
+  if (role !== 'Imposter' || !isAlive) return null;
+
+  return (
+    <>
+      <Selectable
+        as="div"
+        className="voting-action"
+        label={`Kill a ${roleNameLower('Crewmate')}`}
+        onSelect={actions.openKillDialog}
+      >
+        <span>Kill {roleName('Crewmate')}</span>
+      </Selectable>
+
+      {open && (
+        <div className="dialog-overlay">
+          <div className="dialog">
+            <h3>Select a player to mark as killed:</h3>
+            <ul>
+              {targets.map((player) => (
+                <Selectable
+                  key={player}
+                  className={`kill-item ${selected === player ? 'selected' : ''}`}
+                  selected={selected === player}
+                  label={`Mark ${player} as killed`}
+                  onSelect={() => actions.selectKillTarget(player)}
+                >
+                  <span>{player}</span>
+                </Selectable>
+              ))}
+            </ul>
+            <button className="end-game-btn" onClick={actions.confirmKill} disabled={!selected}>
+              Confirm Kill
+            </button>
+            <button className="submit-vote-button" onClick={actions.closeKillDialog}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function EndVoteButton({ isCreator, onEnd }) {
   if (!isCreator) return null;
   return <button className="end-game-btn" onClick={onEnd}>End Vote Now</button>;
@@ -42,13 +91,19 @@ function VotingPage() {
 
   const {
     role, isCreator, isAlive, meetingCaller, votingEnded, displayedResult,
-    myVote, votesCast, alivePlayers, ballot, deadPlayers, secondsLeft,
+    myVote, voidedVote, votesCast, pendingVoters, alivePlayers, ballot, deadPlayers, secondsLeft,
     selectedVote, selectedKillPlayer, killDialogOpen, killTargets,
     colors, voteTotalSeconds, ejected, ejectedWasImposter,
     displayedVerdict, verdictText, verdictComplete
   } = state;
 
-  const waitingLine = `${votesCast}/${alivePlayers.length} voted`;
+  // Naming who is outstanding rather than counting them. A bare 3/4 is
+  // unarguable and unactionable: the room cannot tell which of them to chase,
+  // and anybody who would rather the vote never ended can simply say they have
+  // already voted.
+  const waitingLine = pendingVoters.length > 0
+    ? `${votesCast}/${alivePlayers.length} voted — waiting on ${pendingVoters.join(', ')}`
+    : `${votesCast}/${alivePlayers.length} voted`;
   const voteTimer = secondsLeft !== null && (
     <TimerBar label="Vote ends in" secondsLeft={secondsLeft} totalSeconds={voteTotalSeconds} />
   );
@@ -102,12 +157,26 @@ function VotingPage() {
           <>
             <p>{myVote === 'skip' ? 'You skipped voting.' : `You voted for: ${myVote}`}</p>
             {voteTimer}
-            <p className="vote-progress">Waiting for other players… ({waitingLine})</p>
+            <MarkDeadAction
+              role={role}
+              isAlive={isAlive}
+              open={killDialogOpen}
+              targets={killTargets}
+              selected={selectedKillPlayer}
+              actions={actions}
+            />
+            <p className="vote-progress">{waitingLine}</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
             <DeadPlayersList deadPlayers={deadPlayers} colors={colors} />
           </>
         ) : (
           <>
+            {voidedVote && (
+              <p className="vote-voided" role="alert">
+                {voidedVote} was already dead when this meeting opened, so your vote
+                did not count. Vote again.
+              </p>
+            )}
             <div className="voting-grid">
               {ballot.map((player) => (
                 <Selectable
@@ -134,16 +203,14 @@ function VotingPage() {
               </Selectable>
             </div>
 
-            {role === 'Imposter' && (
-              <Selectable
-                as="div"
-                className="voting-action"
-                label={`Kill a ${roleNameLower('Crewmate')}`}
-                onSelect={actions.openKillDialog}
-              >
-                <span>Kill {roleName('Crewmate')}</span>
-              </Selectable>
-            )}
+            <MarkDeadAction
+              role={role}
+              isAlive={isAlive}
+              open={killDialogOpen}
+              targets={killTargets}
+              selected={selectedKillPlayer}
+              actions={actions}
+            />
 
             <button className="submit-vote-button" onClick={actions.submitVote} disabled={!selectedVote}>
               Submit Vote
@@ -152,31 +219,6 @@ function VotingPage() {
             <p className="vote-progress">{waitingLine}</p>
             <EndVoteButton isCreator={isCreator} onEnd={actions.forceEndVote} />
             <DeadPlayersList deadPlayers={deadPlayers} colors={colors} />
-
-            {killDialogOpen && (
-              <div className="dialog-overlay">
-                <div className="dialog">
-                  <h3>Select a player to mark as killed:</h3>
-                  <ul>
-                    {killTargets.map((player) => (
-                      <Selectable
-                        key={player}
-                        className={`kill-item ${selectedKillPlayer === player ? 'selected' : ''}`}
-                        selected={selectedKillPlayer === player}
-                        label={`Mark ${player} as killed`}
-                        onSelect={() => actions.selectKillTarget(player)}
-                      >
-                        <span>{player}</span>
-                      </Selectable>
-                    ))}
-                  </ul>
-                  <button className="end-game-btn" onClick={actions.confirmKill} disabled={!selectedKillPlayer}>
-                    Confirm Kill
-                  </button>
-                  <button className="submit-vote-button" onClick={actions.closeKillDialog}>Cancel</button>
-                </div>
-              </div>
-            )}
           </>
         )}
         {!votingEnded && (

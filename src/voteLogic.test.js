@@ -2,6 +2,10 @@ import {
   shouldResolveMeeting,
   resolveVote,
   decideOutcome,
+  pendingVotersOf,
+  validVotesOf,
+  votesCastBy,
+  alivePlayersOf,
   VOTE_DURATION_MS
 } from './voteLogic';
 
@@ -84,6 +88,29 @@ describe('resolveVote', () => {
     expect(resolveVote(data).votedOut).toBeNull();
   });
 
+  // Marking somebody dead during the meeting says they were dead before it
+  // opened, so nobody was ever eligible to vote for them. Counted, those votes
+  // exile a corpse, and the same name lands in the dead list twice.
+  test('discards votes cast for a player who was marked dead during the meeting', () => {
+    const data = meeting({ killList: ['kai'], votes: { tyler: 'kai', sam: 'kai' } });
+    expect(resolveVote(data).votedOut).toBeNull();
+    expect(resolveVote(data).message).toMatch(/nobody/i);
+  });
+
+  test('a living plurality still wins once the votes for a corpse are dropped', () => {
+    const data = meeting({
+      players: ['tyler', 'sam', 'kai', 'rae'],
+      killList: ['kai'],
+      votes: { tyler: 'kai', sam: 'rae', rae: 'sam' }
+    });
+    expect(resolveVote(data).votedOut).toBeNull();
+    expect(resolveVote(meeting({
+      players: ['tyler', 'sam', 'kai', 'rae'],
+      killList: ['kai'],
+      votes: { tyler: 'kai', sam: 'rae', rae: 'rae' }
+    })).votedOut).toBe('rae');
+  });
+
   test('handles a deadline expiring with no votes at all', () => {
     const result = resolveVote(meeting({ votes: {} }));
     expect(result.votedOut).toBeNull();
@@ -109,5 +136,37 @@ describe('decideOutcome', () => {
 
   test('the round continues while crewmates outnumber imposters', () => {
     expect(decideOutcome(roles, [])).toBeNull();
+  });
+});
+
+describe('a vote whose target is marked dead mid-meeting', () => {
+  const board = meeting({
+    players: ['tyler', 'sam', 'kai', 'rae'],
+    killList: ['kai'],
+    votes: { sam: 'kai', rae: 'skip' }
+  });
+
+  test('does not stand', () => {
+    expect(validVotesOf(board)).toEqual({ rae: 'skip' });
+  });
+
+  test('leaves its voter still to vote', () => {
+    expect(pendingVotersOf(board)).toEqual(['tyler', 'sam']);
+    expect(votesCastBy(board, alivePlayersOf(board))).toBe(1);
+  });
+
+  test('does not close the meeting on a count that includes it', () => {
+    expect(shouldResolveMeeting(board, NOW)).toBe(false);
+  });
+
+  test('stops being outstanding once that voter votes again', () => {
+    const revoted = { ...board, votes: { ...board.votes, sam: 'tyler', tyler: 'skip' } };
+    expect(pendingVotersOf(revoted)).toEqual([]);
+    expect(shouldResolveMeeting(revoted, NOW)).toBe(true);
+  });
+
+  test('skip is never voided, having no target to lose', () => {
+    const skipped = { ...board, votes: { tyler: 'skip', sam: 'skip', rae: 'skip' } };
+    expect(pendingVotersOf(skipped)).toEqual([]);
   });
 });

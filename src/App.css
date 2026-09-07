@@ -142,6 +142,15 @@ p { margin: 0; }
   font-size: .85rem;
 }
 
+.vote-voided {
+  color: var(--warn);
+  background: rgba(245, 179, 1, .12);
+  border: 1px solid rgba(245, 179, 1, .35);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: .85rem;
+}
+
 .error-message {
   color: var(--danger);
   background: var(--danger-soft);

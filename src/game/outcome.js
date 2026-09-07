@@ -27,6 +27,10 @@ export function livingCounts(gameData) {
   const totals = totalsFor(gameData);
   const revealed = revealedRoles(gameData);
   const values = Object.values(revealed);
+  // By name, not by entry. A name can land in the dead list twice, and counted
+  // twice it leaves a player permanently unaccounted for -- which is a round
+  // that can never be adjudicated again, by any means but the tasks.
+  const out = new Set(gameData?.killList || []);
 
   const traitorsOut = values.filter((role) => role === 'Imposter').length;
   const taskersOut = values.filter((role) => role === 'Crewmate').length;
@@ -36,7 +40,7 @@ export function livingCounts(gameData) {
     taskers: Math.max(0, totals.taskers - taskersOut),
     // Anyone out whose role has not been published yet. Adjudicating while
     // this is non-zero would count them as still alive and call the game late.
-    unaccounted: (gameData?.killList || []).length - values.length
+    unaccounted: out.size - values.length
   };
 }
 

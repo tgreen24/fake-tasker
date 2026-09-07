@@ -1,5 +1,6 @@
 import { EXILED, TRAITOR } from './game/terminology';
 export const VOTE_DURATION_MS = 180000;
+export const SKIP = 'skip';
 
 export function alivePlayersOf(gameData) {
   const players = gameData?.players || [];
@@ -7,9 +8,35 @@ export function alivePlayersOf(gameData) {
   return players.filter((player) => !killList.includes(player));
 }
 
-export function votesCastBy(gameData, alive) {
+// Marking somebody dead during a meeting is a correction, not a kill: it says
+// they were already dead when the meeting opened and should never have been on
+// anybody's ballot. So a vote only stands while both ends of it are still in
+// the game. Their own vote goes, which it always did -- and so does every vote
+// cast for them, which it did not. Those were spent on a player who was not
+// eligible, and counting them exiled a corpse instead of whoever the room was
+// actually trying to exile.
+export function validVotesOf(gameData) {
   const votes = gameData?.votes || {};
-  return alive.filter((player) => votes[player] !== undefined).length;
+  const out = gameData?.killList || [];
+  const alive = alivePlayersOf(gameData);
+  return Object.fromEntries(
+    Object.entries(votes).filter(
+      ([voter, vote]) => alive.includes(voter) && (vote === SKIP || !out.includes(vote))
+    )
+  );
+}
+
+// Who the meeting is still waiting on. A voter whose ballot was voided is back
+// among them: they are asked again rather than told nothing and counted as
+// done.
+export function pendingVotersOf(gameData) {
+  const valid = validVotesOf(gameData);
+  return alivePlayersOf(gameData).filter((player) => valid[player] === undefined);
+}
+
+export function votesCastBy(gameData, alive) {
+  const valid = validVotesOf(gameData);
+  return alive.filter((player) => valid[player] !== undefined).length;
 }
 
 // The deadline is written in the calling phone's clock and read in everybody
@@ -35,14 +62,11 @@ export function shouldResolveMeeting(gameData, now = Date.now()) {
 
 export function resolveVote(gameData) {
   const roles = gameData.roles || {};
-  const alive = alivePlayersOf(gameData);
 
   const counts = {};
-  Object.entries(gameData.votes || {})
-    .filter(([voter]) => alive.includes(voter))
-    .forEach(([, vote]) => {
-      counts[vote] = (counts[vote] || 0) + 1;
-    });
+  Object.values(validVotesOf(gameData)).forEach((vote) => {
+    counts[vote] = (counts[vote] || 0) + 1;
+  });
 
   const tallies = Object.values(counts);
   if (tallies.length === 0) return { message: 'Nobody voted, so nobody was exiled.', votedOut: null };
@@ -51,7 +75,7 @@ export function resolveVote(gameData) {
   const leaders = Object.keys(counts).filter((candidate) => counts[candidate] === highest);
 
   if (leaders.length > 1) return { message: 'A tie, so nobody was exiled.', votedOut: null };
-  if (leaders[0] === 'skip') return { message: 'The vote was skipped.', votedOut: null };
+  if (leaders[0] === SKIP) return { message: 'The vote was skipped.', votedOut: null };
 
   const votedOut = leaders[0];
   return {

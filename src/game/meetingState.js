@@ -1,7 +1,7 @@
 import { assignColors } from './playerColor';
 import { isHost } from './host';
 import { showingVoteResult } from '../gameRoute';
-import { alivePlayersOf, votesCastBy } from '../voteLogic';
+import { alivePlayersOf, pendingVotersOf, validVotesOf, votesCastBy } from '../voteLogic';
 
 export const HOST_HEAD_START_MS = 2500;
 export const PEER_STAGGER_MS = 750;
@@ -13,6 +13,8 @@ export function deriveMeetingState(gameData, playerName, uid, privateData) {
   const votes = gameData?.votes || {};
   const votingResult = gameData?.votingResult || '';
   const alivePlayers = alivePlayersOf(gameData);
+  const validVotes = validVotesOf(gameData);
+  const ownVote = votes[playerName];
 
   return {
     players,
@@ -30,9 +32,13 @@ export function deriveMeetingState(gameData, playerName, uid, privateData) {
     ejected: gameData?.ejected || '',
     ejectedWasImposter: (gameData?.revealed || {})[gameData?.ejected] === 'Imposter',
     votingEnded: showingVoteResult(gameData) || (!gameData?.meetingCalled && !!votingResult),
-    myVote: votes[playerName],
+    myVote: validVotes[playerName],
+    // The ballot they cast that no longer stands, so the screen can say why it
+    // is asking again instead of silently reopening.
+    voidedVote: ownVote !== undefined && validVotes[playerName] === undefined ? ownVote : null,
     ballot: alivePlayers.filter((player) => player !== playerName),
     votesCast: votesCastBy(gameData, alivePlayers),
+    pendingVoters: pendingVotersOf(gameData),
     killableBy: (killer) => players.filter((player) =>
       !deadPlayers.includes(player) && player !== killer && roleMap[player] !== 'Imposter')
   };
