@@ -29,6 +29,16 @@ describe('deriveMeetingState', () => {
     expect(s.votesCast).toBe(1);
   });
 
+  test('does not call the exiled player innocent before their role is in', () => {
+    const pending = deriveMeetingState(meeting({ ejected: 'tyler', killList: ['tyler'] }), 'sam', 'uid-sam', taskerDoc);
+    expect(pending.ejectedRoleKnown).toBe(false);
+    const known = deriveMeetingState(
+      meeting({ ejected: 'tyler', killList: ['tyler'], revealed: { tyler: 'Imposter' } }), 'sam', 'uid-sam', taskerDoc
+    );
+    expect(known.ejectedRoleKnown).toBe(true);
+    expect(known.ejectedWasImposter).toBe(true);
+  });
+
   test('knows whether the viewer is alive and hosting', () => {
     const s = deriveMeetingState(meeting({ killList: ['sam'] }), 'sam', 'uid-sam', taskerDoc);
     expect(s.isAlive).toBe(false);

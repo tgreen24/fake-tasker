@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  addTask as writeTask, addTasks as writeTasks, deleteGame, kickPlayer as writeKick,
-  removeTask as writeRemoveTask, startRound, updateSetting as writeSetting
+  addTask as writeTask, deleteGame, kickPlayer as writeKick, removeTask as writeRemoveTask,
+  setTasks as writeTaskList, startRound, updateSetting as writeSetting
 } from '../game/mutations';
 import { deriveLobbyState, validateNewTask, validateStart } from '../game/lobbyState';
+import { activePackId, withPackSelected } from '../game/taskPacks';
 import { buildRound } from '../game/roleAssignment';
 import { currentUid } from '../firebase';
 import { withTimeout, isTimeout } from '../withTimeout';
@@ -52,10 +53,14 @@ export function useLobby(gameCode) {
     setStarting(true);
     setErrorMessage('');
     try {
-      const ok = await withTimeout(
+      const outcome = await withTimeout(
         startRound(gameCode, buildRound(lobby), gameData?.playerUids || {})
       );
-      if (!ok) setErrorMessage('Could not start the game. Check your connection and try again.');
+      if (outcome === 'roster-changed') {
+        setErrorMessage('Somebody joined or left just then. Tap Start Game again.');
+      } else if (outcome !== 'started') {
+        setErrorMessage('Could not start the game. Check your connection and try again.');
+      }
     } catch (error) {
       setErrorMessage(
         isTimeout(error)
@@ -88,10 +93,10 @@ export function useLobby(gameCode) {
     addOneTask: (task) => writeTask(gameCode, task).catch((error) => {
       console.error('Error adding task:', error);
     }),
-    addManyTasks: (tasks) => {
-      if (!tasks.length) return undefined;
-      return writeTasks(gameCode, tasks).catch((error) => {
-        console.error('Error adding tasks:', error);
+    selectPack: (packId) => {
+      const next = withPackSelected(lobby.tasks, packId);
+      return writeTaskList(gameCode, next).catch((error) => {
+        console.error('Error choosing a task pack:', error);
       });
     },
     kickPlayer: (playerToKick) => {
@@ -99,10 +104,14 @@ export function useLobby(gameCode) {
       return writeKick(gameCode, playerToKick);
     },
     updateSetting: (field, value) => writeSetting(gameCode, field, value)
-  }), [gameCode, playerName, addTask, startGame, finishGame]);
+  }), [gameCode, playerName, addTask, startGame, finishGame, lobby.tasks]);
 
   return {
-    state: { ...lobby, gameCode, playerName, newTask, starting, errorMessage },
+    state: {
+      ...lobby, gameCode, playerName, newTask, starting, errorMessage,
+      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+      activePack: activePackId(lobby.tasks)
+    },
     actions,
     loading,
     connected

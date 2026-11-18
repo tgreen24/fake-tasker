@@ -2,6 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { leaveGame } from '../game/mutations';
 import { clearSession } from '../session';
+import { withTimeout } from '../withTimeout';
+
+const LEAVE_WAIT_MS = 4000;
 
 const CONFIRM_WINDOW_MS = 4000;
 
@@ -27,7 +30,10 @@ function LeaveGame({ gameCode, playerName, inRound = false, role, tasksOutstandi
     // this button exists to prevent.
     if (gameCode && playerName) {
       try {
-        const released = await leaveGame(gameCode, playerName, { inRound, role, tasksOutstanding });
+        const released = await withTimeout(
+          leaveGame(gameCode, playerName, { inRound, role, tasksOutstanding }),
+          LEAVE_WAIT_MS
+        );
         if (!released) {
           console.warn(
             `[leave] your seat was not released -- ${playerName} will still appear to everyone else`

@@ -7,6 +7,7 @@ import AwardList from './components/AwardList';
 import { formatClock } from './game/playerColor';
 import { teamName } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
+import SeatRequests from './components/SeatRequests';
 
 function GameOver() {
   const { gameCode } = useParams();
@@ -16,7 +17,7 @@ function GameOver() {
     return <div className="gameover-screen"><ConnectionBanner connected={connected} />Loading…</div>;
   }
 
-  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason, badges, roundMs, colors } = state;
+  const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason, badges, roundMs, colors, seatRequests, dealtSeats } = state;
 
   return (
     <div className="gameover-screen">
@@ -31,6 +32,8 @@ function GameOver() {
           <div className="player-name">
             <h2>{playerName}</h2>
           </div>
+
+          <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
 
           <p className="gameover-eyebrow">Game Over</p>
           <h1 className={`winning-team reveal-pop ${winner === 'Imposters' ? 'imposters-win' : 'crewmates-win'}`}>

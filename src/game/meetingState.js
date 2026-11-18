@@ -31,6 +31,7 @@ export function deriveMeetingState(gameData, playerName, uid, privateData) {
     votingResult,
     ejected: gameData?.ejected || '',
     ejectedWasImposter: (gameData?.revealed || {})[gameData?.ejected] === 'Imposter',
+    ejectedRoleKnown: !!(gameData?.revealed || {})[gameData?.ejected],
     votingEnded: showingVoteResult(gameData) || (!gameData?.meetingCalled && !!votingResult),
     myVote: validVotes[playerName],
     // The ballot they cast that no longer stands, so the screen can say why it

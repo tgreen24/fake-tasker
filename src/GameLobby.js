@@ -10,6 +10,8 @@ import TaskEditor from './components/TaskEditor';
 import { TASK_PACKS } from './game/taskPacks';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
+import ConfirmButton from './components/ConfirmButton';
+import SeatRequests from './components/SeatRequests';
 import { MIN_PLAYERS } from './game/lobbyState';
 
 function GameLobby() {
@@ -24,7 +26,7 @@ function GameLobby() {
     players, tasks, maxPlayers, playerName, isCreator,
     imposterCount, tasksPerCrewmate, killCooldown,
     imposterOptions, taskCountOptions, colors,
-    newTask, starting, errorMessage
+    newTask, starting, errorMessage, activePack, seatRequests, dealtSeats
   } = state;
 
   return (
@@ -42,6 +44,8 @@ function GameLobby() {
       </div>
 
       <div className="lobby-content">
+        <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
+
         <div className="players-list">
           <h3>Players ({players.length}/{maxPlayers})</h3>
           <div className="player-grid">
@@ -50,12 +54,14 @@ function GameLobby() {
                 <PlayerAvatar name={player} color={colors[player]} />
                 <span>{player}{player === playerName ? ' (You)' : ''}</span>
                 {isCreator && player !== playerName && (
-                  <button
+                  <ConfirmButton
                     className="kick-button"
-                    onClick={() => actions.kickPlayer(player)}
+                    label="✕"
+                    confirmLabel="Remove?"
+                    onConfirm={() => actions.kickPlayer(player)}
                     aria-label={`Remove ${player}`}
                     title="Remove player"
-                  >✕</button>
+                  />
                 )}
               </div>
             ))}
@@ -121,16 +127,20 @@ function GameLobby() {
             <TaskEditor
               tasks={tasks}
               packs={TASK_PACKS}
+              activePack={activePack}
               newTask={newTask}
               onSetNewTask={actions.setNewTask}
               onAddTask={actions.addTask}
               onRemoveTask={actions.removeTask}
-              onAddPack={actions.addManyTasks}
+              onSelectPack={actions.selectPack}
             />
 
-            <button onClick={actions.finishGame} className="end-game-btn">
-              Finish Game and Delete Data
-            </button>
+            <ConfirmButton
+              className="end-game-btn"
+              label="Finish Game and Delete Data"
+              confirmLabel="Tap again to delete the game for everyone"
+              onConfirm={actions.finishGame}
+            />
           </div>
         )}
       </div>

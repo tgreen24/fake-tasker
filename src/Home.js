@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { createGame } from './game/mutations';
+import { playerNameError } from './game/playerName';
 import { saveSession } from './session';
 import { withTimeout, isTimeout } from './withTimeout';
 
@@ -26,8 +27,9 @@ function Home() {
 
   const handleCreateGame = async () => {
     const name = playerName.trim();
-    if (!name) {
-      setErrorMessage('Please enter a player name.');
+    const nameError = playerNameError(name);
+    if (nameError) {
+      setErrorMessage(nameError);
       return;
     }
 
@@ -70,8 +72,9 @@ function Home() {
 
   const handleJoinGame = () => {
     const name = playerName.trim();
-    if (!name) {
-      setErrorMessage('Please enter a player name.');
+    const nameError = playerNameError(name);
+    if (nameError) {
+      setErrorMessage(nameError);
       return;
     }
     navigate('/join', { state: { playerName: name } });

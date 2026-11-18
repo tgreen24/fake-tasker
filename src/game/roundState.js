@@ -7,6 +7,13 @@ const IMPOSTER = 'Imposter';
 const playersWithRole = (roles, role) =>
   Object.keys(roles).filter((player) => roles[player] === role).sort();
 
+// Out of the game with a role nobody has published. Only their own phone holds
+// it, and until it does the round cannot be decided by anything but the tasks.
+export function awaitingRevealOf(gameData) {
+  const revealed = gameData?.revealed || {};
+  return Array.from(new Set(gameData?.killList || [])).filter((name) => !revealed[name]);
+}
+
 export function deriveRoundState(gameData, playerName, uid, privateData) {
   const killList = gameData?.killList || [];
   const sabotages = gameData?.sabotages || {};
@@ -26,6 +33,7 @@ export function deriveRoundState(gameData, playerName, uid, privateData) {
   return {
     role,
     returningFromMeeting: !!gameData?.votingResult,
+    awaitingReveal: awaitingRevealOf(gameData),
     roundStartedAt: gameData?.roundStartedAt,
     meetingEndedAt: gameData?.resultUntil,
     roleOf: (player) => roleMap[player],

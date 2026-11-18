@@ -26,8 +26,14 @@ const OFFLINE_GRACE_MS = 3000;
 //
 // Neither of them is a connection problem, so neither of them says a word to
 // the player. Only a read that actually fails does that.
+//
+// The cheap read turned out not to be a check at all: with a listener already
+// attached to the document, Firestore answers it from that listener's copy, so
+// a dead stream reports itself healthy. The phone simulator caught it -- a dead
+// connection went unnoticed for over half a minute. So silence from the
+// listener is met with a rebuild, which forces a real round trip.
 const STALE_PROBE_MS = 12000;
-const STALE_REBUILD_MS = 30000;
+const STALE_REBUILD_MS = 12000;
 
 // Reading a document through a wedged connection is the least likely thing to
 // work, and it can hang for as long as it likes, so give up and rebuild.

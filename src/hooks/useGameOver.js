@@ -36,7 +36,10 @@ export function useGameOver(gameCode) {
   }, [navigate]);
 
   return {
-    state: { ...summary, playerName, errorMessage },
+    state: {
+      ...summary, playerName, errorMessage,
+      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+    },
     actions: { endGameAndReturnToLobby, leaveGame },
     loading,
     connected

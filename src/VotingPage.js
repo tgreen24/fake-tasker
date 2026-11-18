@@ -7,6 +7,7 @@ import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import TypedVerdict from './components/TypedVerdict';
+import SeatRequests from './components/SeatRequests';
 import { EXILED } from './game/terminology';
 import { roleName, roleNameLower } from './game/terminology';
 
@@ -94,7 +95,7 @@ function VotingPage() {
     myVote, voidedVote, votesCast, pendingVoters, alivePlayers, ballot, deadPlayers, secondsLeft,
     selectedVote, selectedKillPlayer, killDialogOpen, killTargets,
     colors, voteTotalSeconds, ejected, ejectedWasImposter,
-    displayedVerdict, verdictText, verdictComplete
+    displayedVerdict, verdictText, verdictComplete, seatRequests, dealtSeats
   } = state;
 
   // Naming who is outstanding rather than counting them. A bare 3/4 is
@@ -118,6 +119,7 @@ function VotingPage() {
           tone="danger"
           icon="🚨"
         />
+        <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
         {!votingEnded && !myVote && isAlive && voteTimer}
 
         {votingEnded ? (

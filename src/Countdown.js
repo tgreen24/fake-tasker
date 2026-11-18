@@ -8,6 +8,7 @@ import ScreenHeader from './components/ScreenHeader';
 import { roleName, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 import ConfirmButton from './components/ConfirmButton';
+import SeatRequests from './components/SeatRequests';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -23,7 +24,7 @@ function Countdown() {
     crewmates, killList, fellowImposters, killCooldownLeft,
     sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates,
     sabotageCooldownLeft, sabotageCooldownTotal, killCooldown,
-    blended, progress
+    blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal
   } = state;
 
   return (
@@ -50,6 +51,19 @@ function Countdown() {
         ) : (
           <div className="game-content">
             <ScreenHeader title={playerName} status="Game in progress" tone="success" />
+            <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
+
+            {awaitingOthers.length > 0 && (
+              <p className="reveal-notice" role="status">
+                Waiting for {awaitingOthers.join(' and ')}'s phone to reveal their role. Ask them to
+                open the game.
+              </p>
+            )}
+            {lateReveal && (
+              <p className={`reveal-notice landed ${lateReveal.role}`} role="status">
+                {lateReveal.name} was {lateReveal.role === 'Imposter' ? 'the' : 'not the'} {roleName('Imposter')}
+              </p>
+            )}
 
             {role ? (
               <h2

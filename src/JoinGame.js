@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { attemptJoin } from './game/joinGameFlow';
+import ClaimSeat from './components/ClaimSeat';
 import { saveSession } from './session';
 import { withTimeout, isTimeout } from './withTimeout';
 
@@ -8,6 +9,7 @@ function JoinGame() {
   const [gameCode, setGameCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [joining, setJoining] = useState(false);
+  const [taken, setTaken] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -30,6 +32,10 @@ function JoinGame() {
         setErrorMessage(result.error);
         return;
       }
+      if (result.seatTaken) {
+        setTaken(result);
+        return;
+      }
 
       saveSession(result.code, result.name);
       navigate(`/lobby/${result.code}`, { state: { playerName: result.name } });
@@ -45,6 +51,25 @@ function JoinGame() {
     }
   };
 
+  if (taken) {
+    return (
+      <div className="join-game-container">
+        <div className="join-game-card">
+          <h2>Join a Game</h2>
+          <ClaimSeat
+            gameCode={taken.code}
+            playerName={taken.name}
+            onGranted={() => {
+              saveSession(taken.code, taken.name);
+              navigate(`/lobby/${taken.code}`, { state: { playerName: taken.name } });
+            }}
+            onCancel={() => navigate('/')}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="join-game-container">
       <div className="join-game-card">
@@ -56,6 +81,11 @@ function JoinGame() {
             value={gameCode}
             onChange={(e) => setGameCode(e.target.value.toUpperCase())}
             required
+            maxLength={6}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
             className="join-input"
           />
           <button type="submit" className="join-button" disabled={joining}>

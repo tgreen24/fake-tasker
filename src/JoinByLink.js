@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { attemptJoin } from './game/joinGameFlow';
+import ClaimSeat from './components/ClaimSeat';
 import { loadSession, saveSession } from './session';
 import { withTimeout, isTimeout } from './withTimeout';
 
@@ -13,6 +14,7 @@ function JoinByLink() {
   const [playerName, setPlayerName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [joining, setJoining] = useState(false);
+  const [taken, setTaken] = useState(null);
 
   // Already in this game on this device -- a link that gets you back in.
   useEffect(() => {
@@ -33,6 +35,10 @@ function JoinByLink() {
         setErrorMessage(result.error);
         return;
       }
+      if (result.seatTaken) {
+        setTaken(result);
+        return;
+      }
       saveSession(result.code, result.name);
       navigate(`/lobby/${result.code}`, { state: { playerName: result.name } });
     } catch (error) {
@@ -46,6 +52,27 @@ function JoinByLink() {
       setJoining(false);
     }
   };
+
+  const enterTakenSeat = () => {
+    saveSession(taken.code, taken.name);
+    navigate(`/lobby/${taken.code}`, { state: { playerName: taken.name } });
+  };
+
+  if (taken) {
+    return (
+      <div className="join-game-container">
+        <div className="join-game-card">
+          <p className="joining-line">Joining game <strong>{code}</strong></p>
+          <ClaimSeat
+            gameCode={taken.code}
+            playerName={taken.name}
+            onGranted={enterTakenSeat}
+            onCancel={() => setTaken(null)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="join-game-container">

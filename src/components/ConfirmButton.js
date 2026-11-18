@@ -4,7 +4,7 @@ const CONFIRM_WINDOW_MS = 4000;
 
 // For the buttons that cannot be taken back. One tap arms it, the next does it,
 // and it disarms itself so an armed button is never left lying around.
-function ConfirmButton({ className = '', label, confirmLabel, onConfirm }) {
+function ConfirmButton({ className = '', label, confirmLabel, onConfirm, ...rest }) {
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ function ConfirmButton({ className = '', label, confirmLabel, onConfirm }) {
   };
 
   return (
-    <button className={`${className} ${confirming ? 'confirming' : ''}`} onClick={onClick}>
+    <button {...rest} className={`${className} ${confirming ? 'confirming' : ''}`} onClick={onClick}>
       {confirming ? confirmLabel : label}
     </button>
   );

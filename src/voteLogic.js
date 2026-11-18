@@ -1,5 +1,5 @@
 import { EXILED, TRAITOR } from './game/terminology';
-export const VOTE_DURATION_MS = 180000;
+export const VOTE_DURATION_MS = Number(process.env.REACT_APP_VOTE_DURATION_MS) || 180000;
 export const SKIP = 'skip';
 
 export function alivePlayersOf(gameData) {

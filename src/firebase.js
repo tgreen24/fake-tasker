@@ -1,7 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { initializeFirestore } from "firebase/firestore";
+import { connectFirestoreEmulator, initializeFirestore } from "firebase/firestore";
 import {
   browserLocalPersistence,
+  connectAuthEmulator,
   getAuth,
   onAuthStateChanged,
   setPersistence,
@@ -45,6 +46,13 @@ if (appCheckSiteKey) {
 // by a houseful of phones, being told what happened beats saving requests.
 const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 const auth = getAuth(app);
+
+// Only the phone simulator in scripts/sim sets this, at build time.
+if (process.env.REACT_APP_USE_EMULATOR === 'true') {
+  const host = window.location.hostname;
+  connectFirestoreEmulator(db, host, 8080);
+  connectAuthEmulator(auth, `http://${host}:9199`, { disableWarnings: true });
+}
 
 let signInPromise = null;
 

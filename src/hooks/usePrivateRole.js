@@ -3,11 +3,13 @@ import { doc, onSnapshot, getDocFromServer } from 'firebase/firestore';
 import { currentUid, db } from '../firebase';
 import { claimOwnSeat } from '../game/mutations';
 import { noteRoleError, noteRoleRebuild, noteRoleSnapshot } from '../diagnostics';
+import { withTimeout } from '../withTimeout';
 
 const TICK_MS = 1000;
 const FIRST_SNAPSHOT_MS = 2500;
 const STALE_REBUILD_MS = 15000;
 const MAX_BACKOFF_MS = 15000;
+const RESYNC_TIMEOUT_MS = 6000;
 
 // Your role and task list, from a document only your account can read.
 //
@@ -32,6 +34,7 @@ export function usePrivateRole(gameCode, playerName) {
     let retryTimer = null;
     let backoff = 1000;
     let lastActivity = Date.now();
+    let resyncing = false;
     receivedRef.current = false;
     setLoading(true);
 
@@ -87,12 +90,17 @@ export function usePrivateRole(gameCode, playerName) {
       });
     };
 
+    // One at a time and bounded, as the game listener's is: on a wedged
+    // connection these used to pile up at one a second, each one hanging.
     const resync = async () => {
-      if (cancelled || document.hidden) return;
+      if (cancelled || document.hidden || resyncing) return;
+      resyncing = true;
       try {
-        receive(await getDocFromServer(ref));
+        receive(await withTimeout(getDocFromServer(ref), RESYNC_TIMEOUT_MS));
       } catch (error) {
         if (!cancelled) setLoading(false);
+      } finally {
+        resyncing = false;
       }
     };
 
@@ -107,7 +115,13 @@ export function usePrivateRole(gameCode, playerName) {
       }
     };
 
-    const onForeground = () => { if (!document.hidden) resync(); };
+    // Back from the background the listener may be dead without having said
+    // so, and waiting out the quiet clock is fifteen seconds of a stale list.
+    const onForeground = () => {
+      if (document.hidden) return;
+      subscribe();
+      resync();
+    };
 
     subscribe();
     const timer = setInterval(tick, TICK_MS);

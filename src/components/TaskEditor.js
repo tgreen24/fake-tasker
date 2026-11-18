@@ -22,7 +22,10 @@ function groupByRoom(tasks) {
   });
 }
 
-function TaskEditor({ tasks, packs, newTask, onSetNewTask, onAddTask, onRemoveTask, onAddPack }) {
+function TaskEditor({
+  tasks, packs, activePack, newTask,
+  onSetNewTask, onAddTask, onRemoveTask, onSelectPack
+}) {
   const grouped = groupByRoom(tasks);
 
   return (
@@ -31,18 +34,17 @@ function TaskEditor({ tasks, packs, newTask, onSetNewTask, onAddTask, onRemoveTa
 
       <div className="task-editor-body">
         {packs.map((pack) => {
-          const missing = taskTexts(pack).filter((text) => !tasks.includes(text));
+          const inUse = activePack === pack.id;
           return (
             <button
               key={pack.id}
-              className="pack-add-all"
-              onClick={() => onAddPack(missing)}
-              disabled={missing.length === 0}
+              className={`pack-add-all ${inUse ? 'in-use' : ''}`}
+              onClick={() => onSelectPack(inUse ? null : pack.id)}
               title={pack.description}
             >
-              {missing.length === 0
-                ? `${pack.name} pack added`
-                : `Add ${pack.name} pack — ${missing.length} tasks`}
+              {inUse
+                ? `Clear ${pack.name} pack`
+                : `Use ${pack.name} pack — ${taskTexts(pack).length} tasks`}
             </button>
           );
         })}

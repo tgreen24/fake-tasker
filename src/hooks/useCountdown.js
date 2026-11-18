@@ -16,6 +16,7 @@ import { usePublishOutRoles } from './usePublishOutRoles';
 const OPENING_COUNTDOWN_SECONDS = 3;
 const REVEAL_HOLD_MS = 3800;
 const INTRO_WINDOW_MS = 10000;
+const LATE_REVEAL_MS = 8000;
 
 // Only play the opening beat if we actually arrived at it. A refresh ten
 // minutes into a round is not the start of anything. Compared absolutely so a
@@ -57,6 +58,23 @@ export function useCountdown(gameCode) {
   }, [roundStartedAt]);
 
   const completedTasks = ownTasks || round.completedTasks;
+
+  // A role that lands after the vote's result screen has gone would otherwise
+  // never be announced to the room, so the round screen says it instead.
+  const awaitingKey = round.awaitingReveal.join('\n');
+  const revealed = gameData?.revealed;
+  const previouslyAwaiting = useRef([]);
+  const [lateReveal, setLateReveal] = useState(null);
+  useEffect(() => {
+    const landed = previouslyAwaiting.current.find((name) => revealed?.[name]);
+    previouslyAwaiting.current = awaitingKey ? awaitingKey.split('\n') : [];
+    if (landed) setLateReveal({ name: landed, role: revealed[landed] });
+  }, [awaitingKey, revealed]);
+  useEffect(() => {
+    if (!lateReveal) return undefined;
+    const timer = setTimeout(() => setLateReveal(null), LATE_REVEAL_MS);
+    return () => clearTimeout(timer);
+  }, [lateReveal]);
 
   const introKind = !gameData
     ? null
@@ -158,13 +176,16 @@ export function useCountdown(gameCode) {
   return {
     state: {
       ...round, completedTasks, playerName,
+      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
       showIntro,
       introKind,
       countdown: countdown === null ? OPENING_COUNTDOWN_SECONDS : countdown,
       killCooldownLeft, sabotageCooldownLeft,
       sabotageCooldownTotal: SABOTAGE_COOLDOWN_SECONDS,
       sabotageDialogOpen,
-      blended
+      blended,
+      lateReveal,
+      awaitingOthers: round.awaitingReveal.filter((name) => name !== playerName)
     },
     actions,
     loading: loading || roleLoading,

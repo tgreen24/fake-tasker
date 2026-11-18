@@ -1,4 +1,4 @@
-import { deriveRoundState, toggledTaskList } from './roundState';
+import { awaitingRevealOf, deriveRoundState, toggledTaskList } from './roundState';
 
 const HOST_UID = 'uid-tyler';
 const ROLES = { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' };
@@ -119,4 +119,15 @@ describe('deriveRoundState', () => {
 describe('toggledTaskList', () => {
   test('adds a task that is not done', () => expect(toggledTaskList(['a'], 'b')).toEqual(['a', 'b']));
   test('removes one that is', () => expect(toggledTaskList(['a', 'b'], 'a')).toEqual(['b']));
+});
+
+describe('awaitingRevealOf', () => {
+  test('names who is out with a role nobody has published', () => {
+    expect(awaitingRevealOf({ killList: ['sam', 'kai'], revealed: { sam: 'Crewmate' } })).toEqual(['kai']);
+  });
+
+  test('names nobody once every role is in, and counts a doubled name once', () => {
+    expect(awaitingRevealOf({ killList: ['sam', 'sam'], revealed: { sam: 'Crewmate' } })).toEqual([]);
+    expect(awaitingRevealOf({ killList: ['kai', 'kai'] })).toEqual(['kai']);
+  });
 });

@@ -67,11 +67,15 @@ export function useMeeting(gameCode) {
 
   usePublishOutRoles(gameCode, gameData, playerName, privateData);
   const displayedResult = useTypewriter(meeting.votingResult);
-  const verdictText = meeting.ejected
-    ? (meeting.ejectedWasImposter
-        ? `They were the ${roleName('Imposter')}`
-        : `They were not the ${roleName('Imposter')}`)
-    : '';
+  // Only the exiled player's phone knows their role. Until it says, the screen
+  // says so too, rather than announcing an innocent they may not be.
+  const verdictText = !meeting.ejected
+    ? ''
+    : !meeting.ejectedRoleKnown
+    ? `Waiting for ${meeting.ejected}'s phone to reveal their role…`
+    : meeting.ejectedWasImposter
+    ? `They were the ${roleName('Imposter')}`
+    : `They were not the ${roleName('Imposter')}`;
   const displayedVerdict = useTypewriter(verdictText, VERDICT_DELAY_MS);
 
   const { meetingCalled, voteDeadline, isCreator, players } = meeting;
@@ -89,11 +93,12 @@ export function useMeeting(gameCode) {
     if (watchingSince.current === null) watchingSince.current = Date.now();
   }, [meetingCalled]);
 
+  const closing = useRef(false);
   useEffect(() => {
     if (!meetingCalled) return undefined;
 
     const attempt = () => {
-      if (document.hidden) return;
+      if (document.hidden || closing.current) return;
 
       // Everybody having voted is a fact any client can check. Running out of
       // time is not, so only a client that has sat through the whole vote is
@@ -104,11 +109,22 @@ export function useMeeting(gameCode) {
       if (!everyoneVoted && watchedFor < VOTE_DURATION_MS) return;
 
       if (!shouldResolveMeeting(gameData)) return;
-      closeMeeting(gameCode);
+      closing.current = true;
+      closeMeeting(gameCode).finally(() => { closing.current = false; });
     };
 
-    const timer = setTimeout(attempt, myTurnDelay);
-    return () => clearTimeout(timer);
+    // Tried on this phone's turn and then every second, so a vote whose time
+    // runs out closes then -- not whenever the next snapshot happens along,
+    // which on a quiet meeting left everyone staring at 0:00.
+    let retry = null;
+    const first = setTimeout(() => {
+      attempt();
+      retry = setInterval(attempt, 1000);
+    }, myTurnDelay);
+    return () => {
+      clearTimeout(first);
+      if (retry) clearInterval(retry);
+    };
   }, [gameData, meetingCalled, gameCode, myTurnDelay]);
 
   useEffect(() => {
@@ -150,6 +166,7 @@ export function useMeeting(gameCode) {
     state: {
       ...meeting,
       playerName,
+      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
       selectedVote: chosenVote,
       selectedKillPlayer,
       killDialogOpen,

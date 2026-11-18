@@ -59,6 +59,32 @@ export const claimOwnSeat = (gameCode, playerName) =>
 export const claimSeat = (gameCode, playerName) =>
   updateGame(gameCode, { [`playerUids.${playerName}`]: auth.currentUser?.uid || null });
 
+// A player back on a different browser is a different account, and their seat
+// -- including the private role document -- belongs to the old one. Only the
+// host can hand it over, so typing somebody else's name on a spare phone does
+// not get you their role.
+export const requestSeat = (gameCode, playerName) =>
+  updateGame(gameCode, { [`seatRequests.${playerName}`]: auth.currentUser?.uid || null });
+
+export const dismissSeatRequest = (gameCode, playerName) =>
+  updateGame(gameCode, { [`seatRequests.${playerName}`]: deleteField() });
+
+export async function grantSeat(gameCode, playerName, uid, { dealt = false } = {}) {
+  try {
+    const batch = writeBatch(db);
+    batch.update(gameRef(gameCode), {
+      [`playerUids.${playerName}`]: uid,
+      [`seatRequests.${playerName}`]: deleteField()
+    });
+    if (dealt) batch.update(playerRef(gameCode, playerName), { uid });
+    await batch.commit();
+    return true;
+  } catch (error) {
+    console.warn('[seat] could not hand the seat over', error);
+    return false;
+  }
+}
+
 // Firestore does not cascade, so the private documents have to go explicitly --
 // and by the seats that were dealt, not the current roster. Anyone kicked or
 // who left since the deal still has one, and once the parent is gone nothing
@@ -110,10 +136,12 @@ export const kickPlayer = (gameCode, playerName) =>
 export const addTask = (gameCode, task) =>
   updateDoc(gameRef(gameCode), { tasks: arrayUnion(task) });
 
-// arrayUnion ignores anything already there, so adding a pack twice is a no-op
-// rather than a list full of duplicates.
-export const addTasks = (gameCode, tasks) =>
-  updateDoc(gameRef(gameCode), { tasks: arrayUnion(...tasks) });
+// Choosing a pack swaps one list for another, which is a removal as much as an
+// addition, and Firestore will not take both on one field in one write. Only
+// the host may write tasks at all, so there is no second writer to lose an
+// edit to.
+export const setTasks = (gameCode, tasks) =>
+  updateGame(gameCode, { tasks });
 
 export const removeTask = (gameCode, task) =>
   updateDoc(gameRef(gameCode), { tasks: arrayRemove(task) });
@@ -125,60 +153,74 @@ export const updateSetting = (gameCode, field, value) =>
 // account that holds the seat. The shared document never carries them again.
 // Traitors get the whole map in theirs, because a traitor legitimately knows
 // who everyone is -- that is what the target list has always been.
+// A transaction so a deal can only happen once: a Start that timed out and was
+// tapped again used to land twice on reconnect, reshuffling roles people had
+// already seen. It also refuses a roster that changed under the host, so
+// somebody joining mid-tap is not left in the game without a role.
 export async function startRound(gameCode, { roles, assignedTasks, imposterHistory }, playerUids = {}) {
   try {
-    const batch = writeBatch(db);
-
-    Object.keys(roles).forEach((playerName) => {
-      const isTraitor = roles[playerName] === 'Imposter';
-      batch.set(playerRef(gameCode, playerName), {
-        uid: playerUids[playerName] || null,
-        role: roles[playerName],
-        tasks: assignedTasks[playerName] || [],
-        completedTasks: [],
-        ...(isTraitor ? { roleMap: roles } : {})
-      });
+    return await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef(gameCode));
+      if (!snapshot.exists()) return 'missing';
+      const data = snapshot.data();
+      if (data.gameStarted) return 'started';
+      const dealt = Object.keys(roles).sort().join('\n');
+      if ((data.players || []).slice().sort().join('\n') !== dealt) return 'roster-changed';
+      const uids = { ...playerUids, ...(data.playerUids || {}) };
+      dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, uids);
+      return 'started';
     });
-
-    batch.update(gameRef(gameCode), {
-      imposterHistory,
-      dealtSeats: arrayUnion(...Object.keys(roles)),
-      killList: [],
-      votes: {},
-      sabotages: {},
-      revealed: {},
-      tasksCompleted: 0,
-      killCooldowns: {},
-      sabotageCooldowns: {},
-      kills: {},
-      voteLog: [],
-      taskCounts: {},
-      finishedAt: {},
-      endedAt: deleteField(),
-      gameStarted: true,
-      gameEnded: false,
-      meetingCalled: false,
-      roundStartedAt: Date.now(),
-      expiresAt: expiry(),
-      roles: deleteField(),
-      assignedTasks: deleteField(),
-      completedTasks: deleteField(),
-      meetingCaller: deleteField(),
-      votingResult: deleteField(),
-      resultUntil: deleteField(),
-      voteDeadline: deleteField(),
-      ejected: deleteField(),
-      leftBy: deleteField(),
-      winner: deleteField(),
-      winReason: deleteField()
-    });
-
-    await batch.commit();
-    return true;
   } catch (error) {
     console.error('[round] could not start the round', error);
-    return false;
+    return 'failed';
   }
+}
+
+function dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, playerUids) {
+  Object.keys(roles).forEach((playerName) => {
+    const isTraitor = roles[playerName] === 'Imposter';
+    tx.set(playerRef(gameCode, playerName), {
+      uid: playerUids[playerName] || null,
+      role: roles[playerName],
+      tasks: assignedTasks[playerName] || [],
+      completedTasks: [],
+      ...(isTraitor ? { roleMap: roles } : {})
+    });
+  });
+
+  tx.update(gameRef(gameCode), {
+    imposterHistory,
+    dealtSeats: arrayUnion(...Object.keys(roles)),
+    killList: [],
+    votes: {},
+    sabotages: {},
+    revealed: {},
+    tasksCompleted: 0,
+    killCooldowns: {},
+    sabotageCooldowns: {},
+    kills: {},
+    voteLog: [],
+    taskCounts: {},
+    finishedAt: {},
+    endedAt: deleteField(),
+    gameStarted: true,
+    gameEnded: false,
+    meetingCalled: false,
+    roundStartedAt: Date.now(),
+    expiresAt: expiry(),
+    roles: deleteField(),
+    assignedTasks: deleteField(),
+    completedTasks: deleteField(),
+    meetingCaller: deleteField(),
+    votingResult: deleteField(),
+    resultUntil: deleteField(),
+    voteDeadline: deleteField(),
+    ejected: deleteField(),
+    leftBy: deleteField(),
+    winner: deleteField(),
+    winReason: deleteField(),
+    seatRequests: deleteField()
+  });
 }
 
 export const endRound = (gameCode) => updateGame(gameCode, {
@@ -323,6 +365,11 @@ export async function callMeeting(gameCode, playerName) {
       if (!snapshot.exists()) return;
 
       const data = snapshot.data();
+      // A phone back from the background shows the round for a moment before
+      // it catches up, and a press in that moment used to restart the meeting
+      // everyone was already in, wiping the votes cast so far.
+      if (data.meetingCalled || data.gameEnded || !data.gameStarted) return;
+      if ((data.killList || []).includes(playerName)) return;
       const now = Date.now();
 
       tx.update(gameRef(gameCode), {
