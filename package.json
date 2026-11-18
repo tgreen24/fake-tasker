@@ -18,7 +18,9 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "test:rules": "firebase --project rules-test emulators:exec --only firestore \"node scripts/test-rules.mjs\""
+    "test:rules": "firebase --project rules-test emulators:exec --only firestore \"node scripts/test-rules.mjs\"",
+    "sim:build": "REACT_APP_USE_EMULATOR=true REACT_APP_FIREBASE_PROJECT_ID=demo-fake-tasker REACT_APP_APPCHECK_SITE_KEY= REACT_APP_VOTE_DURATION_MS=20000 BUILD_PATH=build-sim GENERATE_SOURCEMAP=false react-scripts build",
+    "sim": "npm run sim:build && firebase --project demo-fake-tasker emulators:exec --only firestore,auth \"node scripts/sim/run.mjs\""
   },
   "eslintConfig": {
     "extends": [
@@ -40,6 +42,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^3.0.4",
-    "firebase-tools": "^13.22.1"
+    "firebase-tools": "^13.22.1",
+    "playwright": "^1.49.1"
   }
 }
