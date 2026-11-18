@@ -109,6 +109,7 @@ export function useLobby(gameCode) {
   return {
     state: {
       ...lobby, gameCode, playerName, newTask, starting, errorMessage,
+      seatLost: !!gameData?.playerUids?.[playerName] && gameData.playerUids[playerName] !== currentUid(),
       seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
       activePack: activePackId(lobby.tasks)
     },

@@ -4,7 +4,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { createGame } from './game/mutations';
 import { playerNameError } from './game/playerName';
-import { saveSession } from './session';
+import { clearSession, loadSession, saveSession } from './session';
 import { withTimeout, isTimeout } from './withTimeout';
 
 const CODE_CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -24,6 +24,9 @@ function Home() {
   const [playerName, setPlayerName] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [creating, setCreating] = useState(false);
+  // Any way a phone lands here mid-game -- a home-screen app iOS restarted, a
+  // tab that lost its place -- the way back is one tap, not a name and a code.
+  const [current, setCurrent] = useState(() => loadSession());
 
   const handleCreateGame = async () => {
     const name = playerName.trim();
@@ -84,6 +87,25 @@ function Home() {
     <div className="home">
       <div className="home-card">
         <h1>Fake Tasker</h1>
+        {current && (
+          <div className="resume-game">
+            <button
+              className="start-game-btn"
+              onClick={() => navigate(`/lobby/${current.gameCode}`, { state: { playerName: current.playerName } })}
+            >
+              Back to game {current.gameCode} as {current.playerName}
+            </button>
+            <button
+              className="leave-game"
+              onClick={() => {
+                clearSession();
+                setCurrent(null);
+              }}
+            >
+              Forget that game
+            </button>
+          </div>
+        )}
         <input
           type="text"
           placeholder="Enter your player name"

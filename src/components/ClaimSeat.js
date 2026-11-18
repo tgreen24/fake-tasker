@@ -6,7 +6,7 @@ import { requestSeat } from '../game/mutations';
 // The name is taken by a seat this browser does not hold. That is either
 // somebody else, or this player on a new browser -- a chat app's built-in one,
 // a borrowed phone -- and only the host, stood in the same room, can say which.
-function ClaimSeat({ gameCode, playerName, onGranted, onCancel }) {
+function ClaimSeat({ gameCode, playerName, onGranted = () => {}, onCancel, message }) {
   const [status, setStatus] = useState('idle');
   const asked = useRef(false);
   const granted = useRef(onGranted);
@@ -38,7 +38,7 @@ function ClaimSeat({ gameCode, playerName, onGranted, onCancel }) {
 
   return (
     <div className="claim-seat">
-      <p>Somebody in this game is already called <strong>{playerName}</strong>.</p>
+      <p>{message || <>Somebody in this game is already called <strong>{playerName}</strong>.</>}</p>
       {status === 'asking' || status === 'granted' ? (
         <p className="vote-progress" role="status">
           Asking the host to let you back in. They will see a button on their screen.
@@ -52,7 +52,7 @@ function ClaimSeat({ gameCode, playerName, onGranted, onCancel }) {
           </button>
         </>
       )}
-      <button className="leave-game" onClick={onCancel}>Use a different name</button>
+      {onCancel && <button className="leave-game" onClick={onCancel}>Use a different name</button>}
     </div>
   );
 }

@@ -12,6 +12,9 @@ import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { usePrivateRole } from './usePrivateRole';
 import { usePublishOutRoles } from './usePublishOutRoles';
+import { withTimeout } from '../withTimeout';
+
+const TASK_WAIT_MS = 10000;
 
 const OPENING_COUNTDOWN_SECONDS = 3;
 const REVEAL_HOLD_MS = 3800;
@@ -129,8 +132,19 @@ export function useCountdown(gameCode) {
       // The list comes back from the write itself, decided on the server, so
       // what we act on next is what actually landed rather than what the
       // screen believed a moment ago.
-      const nextCompleted = await toggleTaskCompletion(gameCode, playerName, task)
+      let timedOut = false;
+      const nextCompleted = await withTimeout(toggleTaskCompletion(gameCode, playerName, task), TASK_WAIT_MS)
+        .catch(() => {
+          timedOut = true;
+          return null;
+        })
         .finally(() => inFlight.current.delete(task));
+      // A tap that never came back may still land, so neither the guess nor the
+      // old list is safe to keep: go back to whatever the server says.
+      if (timedOut) {
+        setOwnTasks(null);
+        return;
+      }
       if (!nextCompleted) {
         setOwnTasks(previous);
         return;
@@ -176,6 +190,7 @@ export function useCountdown(gameCode) {
   return {
     state: {
       ...round, completedTasks, playerName,
+      seatLost: !!gameData?.playerUids?.[playerName] && gameData.playerUids[playerName] !== currentUid(),
       seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
       showIntro,
       introKind,

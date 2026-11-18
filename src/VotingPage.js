@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useMeeting } from './hooks/useMeeting';
 import ConnectionBanner from './components/ConnectionBanner';
+import LoadingScreen from './components/LoadingScreen';
 import PlayerAvatar from './components/PlayerAvatar';
 import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
@@ -87,7 +88,7 @@ function VotingPage() {
   const { state, actions, loading, connected } = useMeeting(gameCode);
 
   if (loading) {
-    return <div className="voting-page"><ConnectionBanner connected={connected} />Loading…</div>;
+    return <LoadingScreen className="voting-page" connected={connected} gameCode={gameCode} />;
   }
 
   const {
@@ -95,7 +96,7 @@ function VotingPage() {
     myVote, voidedVote, votesCast, pendingVoters, alivePlayers, ballot, deadPlayers, secondsLeft,
     selectedVote, selectedKillPlayer, killDialogOpen, killTargets,
     colors, voteTotalSeconds, ejected, ejectedWasImposter,
-    displayedVerdict, verdictText, verdictComplete, seatRequests, dealtSeats
+    displayedVerdict, verdictText, verdictComplete, seatRequests, dealtSeats, voteSending
   } = state;
 
   // Naming who is outstanding rather than counting them. A bare 3/4 is
@@ -157,7 +158,11 @@ function VotingPage() {
           </>
         ) : myVote ? (
           <>
-            <p>{myVote === 'skip' ? 'You skipped voting.' : `You voted for: ${myVote}`}</p>
+            <p>
+              {voteSending
+                ? 'Sending your vote…'
+                : myVote === 'skip' ? 'You skipped voting.' : `You voted for: ${myVote}`}
+            </p>
             {voteTimer}
             <MarkDeadAction
               role={role}

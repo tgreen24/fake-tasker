@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useCountdown } from './hooks/useCountdown';
 import ConnectionBanner from './components/ConnectionBanner';
+import LoadingScreen from './components/LoadingScreen';
 import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
@@ -9,13 +10,14 @@ import { roleName, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 import ConfirmButton from './components/ConfirmButton';
 import SeatRequests from './components/SeatRequests';
+import ClaimSeat from './components/ClaimSeat';
 
 function Countdown() {
   const { gameCode } = useParams();
   const { state, actions, loading, connected } = useCountdown(gameCode);
 
   if (loading) {
-    return <div className="countdown-screen"><ConnectionBanner connected={connected} />Loading…</div>;
+    return <LoadingScreen className="countdown-screen" connected={connected} gameCode={gameCode} />;
   }
 
   const {
@@ -24,7 +26,7 @@ function Countdown() {
     crewmates, killList, fellowImposters, killCooldownLeft,
     sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates,
     sabotageCooldownLeft, sabotageCooldownTotal, killCooldown,
-    blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal
+    blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal, seatLost
   } = state;
 
   return (
@@ -79,8 +81,19 @@ function Countdown() {
               // Falling through to the tasker line here would state a role we do
               // not have, and the one it would mislead worst is the traitor.
               <div className="role-unavailable" role="alert">
-                <h2>Your role has not arrived</h2>
-                <p>Reload the page. Keep your screen to yourself until it does.</p>
+                {seatLost ? (
+                  <ClaimSeat
+                    gameCode={gameCode}
+                    playerName={playerName}
+                    message="Your seat is in use on another phone or browser."
+                  />
+                ) : (
+                  <>
+                    <h2>Your role has not arrived</h2>
+                    <p>Keep your screen to yourself until it does.</p>
+                    <button onClick={() => window.location.reload()}>Reload</button>
+                  </>
+                )}
               </div>
             )}
 

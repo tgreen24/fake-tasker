@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { publishOwnRole } from '../game/mutations';
+import { withTimeout } from '../withTimeout';
+
+const PUBLISH_WAIT_MS = 8000;
 
 // A round cannot be adjudicated while somebody is out whose role nobody has
 // published -- counting them as still playing would end games early, so the
@@ -33,9 +36,11 @@ export function usePublishOutRoles(gameCode, gameData, playerName, privateData) 
     const publish = (name, theirRole) => {
       if (!theirRole || known[name] || attempted.current.has(name)) return;
       attempted.current.add(name);
-      publishOwnRole(gameCode, name, theirRole).then((saved) => {
-        if (!saved) attempted.current.delete(name);
-      });
+      withTimeout(publishOwnRole(gameCode, name, theirRole), PUBLISH_WAIT_MS)
+        .catch(() => false)
+        .then((saved) => {
+          if (!saved) attempted.current.delete(name);
+        });
     };
 
     if (playerName && out.includes(playerName)) publish(playerName, role);

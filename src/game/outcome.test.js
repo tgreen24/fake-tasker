@@ -149,6 +149,18 @@ describe('winReasonFor', () => {
     expect(winReasonFor(g, 'Imposters')).toBe('ejection');
   });
 
+  test('a kill after an exile is the kill, not the exile', () => {
+    const g = {
+      ...base,
+      players: [...base.players, 'lee', 'mo'],
+      imposterCount: 2,
+      killList: ['tyler', 'sam'],
+      revealed: { tyler: 'Imposter', sam: 'Crewmate' },
+      ejected: 'tyler'
+    };
+    expect(winReasonFor(g, 'Imposters')).toBe('kills');
+  });
+
   test('killed down to parity', () => {
     const g = {
       ...base,

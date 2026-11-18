@@ -39,7 +39,7 @@ describe('revealRoster', () => {
   });
 
   test('survives a game that never started', () => {
-    expect(revealRoster(null)).toEqual({ imposters: [], crewmates: [], pending: 0 });
+    expect(revealRoster(null)).toEqual({ imposters: [], crewmates: [], pending: 0, pendingNames: [] });
   });
 
   test('handles several imposters', () => {

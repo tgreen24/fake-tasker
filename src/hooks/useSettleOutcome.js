@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { endGame } from '../game/mutations';
 import { decideOutcomeFromCounts, winReasonFor } from '../game/outcome';
+import { withTimeout } from '../withTimeout';
+
+const SETTLE_WAIT_MS = 8000;
 
 // Settling the round used to be chained onto whichever write caused it, which
 // meant a verdict could be lost when that write's effect was cleaned up before
@@ -24,8 +27,10 @@ export function useSettleOutcome(gameCode, gameData) {
     // for good, and the only thing that clears the latch is the round ending --
     // which is the very thing that could no longer happen.
     settling.current = true;
-    endGame(gameCode, winner, winReasonFor(gameData, winner)).then((saved) => {
-      if (!saved) settling.current = false;
-    });
+    withTimeout(endGame(gameCode, winner, winReasonFor(gameData, winner)), SETTLE_WAIT_MS)
+      .catch(() => false)
+      .then((saved) => {
+        if (!saved) settling.current = false;
+      });
   }, [gameCode, gameData]);
 }

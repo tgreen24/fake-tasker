@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useGameOver } from './hooks/useGameOver';
 import ConnectionBanner from './components/ConnectionBanner';
+import LoadingScreen from './components/LoadingScreen';
 import RevealRoster from './components/RevealRoster';
 import AwardList from './components/AwardList';
 import { formatClock } from './game/playerColor';
@@ -14,7 +15,7 @@ function GameOver() {
   const { state, actions, loading, connected } = useGameOver(gameCode);
 
   if (loading) {
-    return <div className="gameover-screen"><ConnectionBanner connected={connected} />Loading…</div>;
+    return <LoadingScreen className="gameover-screen" connected={connected} gameCode={gameCode} />;
   }
 
   const { playerName, winner, role, playerWon, isCreator, hostReachable, errorMessage, roster, winReason, badges, roundMs, colors, seatRequests, dealtSeats } = state;

@@ -43,7 +43,8 @@ export function revealRoster(gameData) {
   return {
     imposters: dealt.filter((entry) => entry.role === 'Imposter'),
     crewmates: dealt.filter((entry) => entry.role === 'Crewmate'),
-    pending: players.length - dealt.length
+    pending: players.length - dealt.length,
+    pendingNames: players.filter((player) => !revealed[player])
   };
 }
 

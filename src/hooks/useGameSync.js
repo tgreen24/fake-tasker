@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, getDocFromServer } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, resetConnection } from '../firebase';
 import { routeForState } from '../gameRoute';
-import { recordExit } from '../session';
+import { clearSession, recordExit } from '../session';
 import { withTimeout } from '../withTimeout';
 
 const ROUTE_TICK_MS = 1000;
@@ -39,17 +39,15 @@ const STALE_REBUILD_MS = 12000;
 // work, and it can hang for as long as it likes, so give up and rebuild.
 const RESYNC_TIMEOUT_MS = 6000;
 
-// How long to wait for the server to settle whether a game exists before
-// accepting that it does not. Only ever applies to a game this client has
-// never successfully read; once we have seen it, a cold cache never takes it
-// away again.
-const MISSING_GRACE_MS = 15000;
+// Away long enough that the connection may have died under it.
+const LONG_AWAY_MS = 10000;
 
 export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
   const navigate = useNavigate();
   const [gameData, setGameData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(true);
+  const [pendingWrites, setPendingWrites] = useState(false);
 
   const dataRef = useRef(null);
   const connectedRef = useRef(true);
@@ -64,11 +62,12 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     }
     const target = routeForState(data, playerName, gameCode);
     if (target === window.location.pathname) return;
-    // The other way to land on the home screen is abandon(), which records its
-    // own reason -- this covers being dropped from the roster while the game
-    // itself is still there.
+    // Dropped from the roster while the game itself is still there: kicked, or
+    // left from another tab. The session goes too, or Home would keep offering
+    // a way back into a seat that no longer exists.
     if (target === '/' && data) {
       recordExit('no longer on the roster', { gameCode, playerName });
+      clearSession();
     }
     navigate(target, { state: { playerName }, replace: true });
   };
@@ -82,7 +81,6 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     let offlineTimer = null;
     let backoff = 1000;
     let lastSnapshotAt = Date.now();
-    let missingSince = null;
     let resyncing = false;
     let lastListenerAt = Date.now();
 
@@ -113,17 +111,6 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       }, OFFLINE_GRACE_MS);
     };
 
-    // Deliberately does not read playerName: this effect owns the listener and
-    // must not tear it down and rebuild it just because a name changed.
-    const abandon = (reason) => {
-      recordExit(reason, { gameCode });
-      missingSince = null;
-      dataRef.current = null;
-      setGameData(null);
-      setLoading(false);
-      routeRef.current(null);
-    };
-
     const receive = (snapshot) => {
       if (cancelled) return;
       backoff = 1000;
@@ -136,19 +123,17 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         // cold cache, not a deleted game, and treating it as one is what put a
         // backgrounded phone back on the home screen mid-round. Only a server
         // answer is allowed to end somebody's game.
+        //
+        // Nor is a slow network: a phone reopened on bad signal used to be sent
+        // home after fifteen seconds of this, from a game that was fine. It
+        // keeps asking, and the loading screen offers a way out instead.
         if (snapshot.metadata.fromCache) {
-          if (missingSince === null) missingSince = Date.now();
           resync();
-          // Waiting forever is its own way of being stuck, so a game we have
-          // never once read is given up on. A game already on screen is not:
-          // there is nothing to wait for and nothing to gain by leaving.
-          if (!dataRef.current && Date.now() - missingSince > MISSING_GRACE_MS) {
-            abandon('waited for the game and it never arrived');
-          }
           return;
         }
 
-        missingSince = null;
+        recordExit('the server says this game is gone', { gameCode });
+        clearSession();
         dataRef.current = null;
         setGameData(null);
         setLoading(false);
@@ -156,8 +141,8 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
         return;
       }
 
-      missingSince = null;
       const data = snapshot.data();
+      setPendingWrites(snapshot.metadata.hasPendingWrites);
       dataRef.current = data;
       setGameData(data);
       setLoading(false);
@@ -190,8 +175,11 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       }
       lastSnapshotAt = Date.now();
       lastListenerAt = Date.now();
+      // Metadata changes too, so the screen learns when its own write has
+      // actually reached the server rather than only that it was made.
       unsubscribe = onSnapshot(
         gameRef,
+        { includeMetadataChanges: true },
         (snapshot) => {
           lastListenerAt = Date.now();
           receive(snapshot);
@@ -225,9 +213,19 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     };
 
     // pageshow covers iOS Safari bfcache restores, which skip visibilitychange.
+    let hiddenAt = null;
     const onForeground = () => {
-      if (document.hidden) return;
+      if (document.hidden) {
+        hiddenAt = hiddenAt || Date.now();
+        return;
+      }
+      const awayFor = hiddenAt ? Date.now() - hiddenAt : 0;
+      hiddenAt = null;
       if (dataRef.current) routeRef.current(dataRef.current);
+      if (awayFor > LONG_AWAY_MS) {
+        resetConnection().then(() => rebuild());
+        return;
+      }
       if (Date.now() - lastListenerAt > STALE_PROBE_MS) rebuild();
       else resync();
     };
@@ -236,19 +234,13 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
       if (document.hidden) return;
       if (dataRef.current) routeRef.current(dataRef.current);
 
-      // A listener that never delivers a second snapshot would otherwise leave
-      // the grace period running forever.
-      if (missingSince !== null && !dataRef.current && Date.now() - missingSince > MISSING_GRACE_MS) {
-        abandon('waited for the game and it never arrived');
-        return;
-      }
-
       // Rebuilding is what brings live updates back, so it is driven by the
       // stream's own silence rather than by nothing having happened. A read
       // that keeps succeeding would otherwise leave a dead listener in place
       // and quietly turn the whole game into a poll.
       if (Date.now() - lastListenerAt > STALE_REBUILD_MS) {
-        rebuild();
+        if (connectedRef.current) rebuild();
+        else resetConnection().then(() => rebuild());
         return;
       }
 
@@ -276,5 +268,5 @@ export function useGameSync(gameCode, playerName, { enabled = true } = {}) {
     };
   }, [gameCode, enabled]);
 
-  return { gameData, loading, connected };
+  return { gameData, loading, connected, pendingWrites };
 }

@@ -2,6 +2,7 @@ import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useLobby } from './hooks/useLobby';
 import ConnectionBanner from './components/ConnectionBanner';
+import LoadingScreen from './components/LoadingScreen';
 import PlayerAvatar from './components/PlayerAvatar';
 import ScreenHeader from './components/ScreenHeader';
 import HowToPlay from './components/HowToPlay';
@@ -12,6 +13,7 @@ import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 import ConfirmButton from './components/ConfirmButton';
 import SeatRequests from './components/SeatRequests';
+import ClaimSeat from './components/ClaimSeat';
 import { MIN_PLAYERS } from './game/lobbyState';
 
 function GameLobby() {
@@ -19,14 +21,14 @@ function GameLobby() {
   const { state, actions, loading, connected } = useLobby(gameCode);
 
   if (loading) {
-    return <div className="game-lobby"><ConnectionBanner connected={connected} />Loading game data…</div>;
+    return <LoadingScreen className="game-lobby" connected={connected} gameCode={gameCode} />;
   }
 
   const {
     players, tasks, maxPlayers, playerName, isCreator,
     imposterCount, tasksPerCrewmate, killCooldown,
     imposterOptions, taskCountOptions, colors,
-    newTask, starting, errorMessage, activePack, seatRequests, dealtSeats
+    newTask, starting, errorMessage, activePack, seatRequests, dealtSeats, seatLost
   } = state;
 
   return (
@@ -45,6 +47,13 @@ function GameLobby() {
 
       <div className="lobby-content">
         <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
+        {seatLost && (
+          <ClaimSeat
+            gameCode={gameCode}
+            playerName={playerName}
+            message="Your seat is in use on another phone or browser, so your role would go there."
+          />
+        )}
 
         <div className="players-list">
           <h3>Players ({players.length}/{maxPlayers})</h3>

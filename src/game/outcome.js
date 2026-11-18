@@ -91,7 +91,11 @@ export function winReasonFor(gameData, winner) {
     return 'imposters-ejected';
   }
 
+  // Only an exiled tasker can hand the traitors the game; an exiled traitor
+  // never brings them closer to it.
   const ejected = gameData?.ejected;
-  const wasEjected = !!ejected && (gameData?.killList || []).includes(ejected);
+  const wasEjected = !!ejected
+    && (gameData?.killList || []).includes(ejected)
+    && (gameData?.revealed || {})[ejected] === 'Crewmate';
   return wasEjected ? 'ejection' : 'kills';
 }

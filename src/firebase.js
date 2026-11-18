@@ -1,5 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { connectFirestoreEmulator, initializeFirestore } from "firebase/firestore";
+import {
+  connectFirestoreEmulator, disableNetwork, enableNetwork, initializeFirestore
+} from "firebase/firestore";
 import {
   browserLocalPersistence,
   connectAuthEmulator,
@@ -88,5 +90,20 @@ export function ensureSignedIn() {
 }
 
 export const currentUid = () => auth.currentUser?.uid || null;
+
+// Rebuilding a listener reuses Firestore's connection, and a connection iOS
+// killed while the phone was locked can look alive while nothing goes through
+// it -- writes included, so a vote could sit unsent. Cycling the network tears
+// both channels down and opens fresh ones; unsent writes are kept and resent.
+let resetting = null;
+export function resetConnection() {
+  if (!resetting) {
+    resetting = disableNetwork(db)
+      .then(() => enableNetwork(db))
+      .catch((error) => console.warn('[firestore] could not reset the connection', error))
+      .finally(() => { resetting = null; });
+  }
+  return resetting;
+}
 
 export { db, auth };

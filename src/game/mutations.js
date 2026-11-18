@@ -54,10 +54,31 @@ export function joinGame(gameCode, playerName) {
 export const claimOwnSeat = (gameCode, playerName) =>
   updateDoc(playerRef(gameCode, playerName), { uid: auth.currentUser?.uid || null });
 
-// Re-announced on every load: an account can change between sessions, and a
-// private document addressed to a stale one is unreadable by its owner.
-export const claimSeat = (gameCode, playerName) =>
-  updateGame(gameCode, { [`playerUids.${playerName}`]: auth.currentUser?.uid || null });
+// Re-announced on every load, but only into an empty seat or one this account
+// already holds. Writing it unconditionally let a forgotten tab on an old
+// browser take a seat back from the new one the host had just handed it to --
+// and the next deal then addressed that player's role to the wrong browser.
+// A seat held by another account goes through the host instead (ClaimSeat).
+export async function claimSeat(gameCode, playerName) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return false;
+  try {
+    return await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef(gameCode));
+      if (!snapshot.exists()) return false;
+      const data = snapshot.data();
+      if (!(data.players || []).includes(playerName)) return false;
+      const holder = (data.playerUids || {})[playerName];
+      if (holder === uid) return true;
+      if (holder) return false;
+      tx.update(gameRef(gameCode), { [`playerUids.${playerName}`]: uid });
+      return true;
+    });
+  } catch (error) {
+    console.warn('[seat] could not announce this seat', error);
+    return false;
+  }
+}
 
 // A player back on a different browser is a different account, and their seat
 // -- including the private role document -- belongs to the old one. Only the
@@ -117,6 +138,9 @@ export function leaveGame(gameCode, playerName, { inRound = false, role, tasksOu
 
   return updateGame(gameCode, {
     killList: arrayUnion(playerName),
+    // Only the saboteur's phone has the button that ends a sabotage, so one
+    // left running by somebody who has gone blocks its target for good.
+    [`sabotages.${playerName}`]: deleteField(),
     ...(role ? { [`revealed.${playerName}`]: role } : {}),
     ...(tasksOutstanding > 0 ? { tasksCompleted: increment(tasksOutstanding) } : {})
   });
@@ -279,7 +303,10 @@ export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds, vict
     killList: arrayUnion(crewmate),
     [`revealed.${crewmate}`]: victimRole,
     [`kills.${crewmate}`]: playerName,
-    [`killCooldowns.${playerName}`]: cooldownExpiryFor(cooldownSeconds)
+    [`killCooldowns.${playerName}`]: cooldownExpiryFor(cooldownSeconds),
+    // The last exile stays on the document until the next meeting, and a win
+    // settled after this kill would otherwise be blamed on it.
+    ejected: deleteField()
   });
 
 export const undoKill = (gameCode, crewmate, playerName) =>
@@ -294,6 +321,11 @@ export const undoKill = (gameCode, crewmate, playerName) =>
 // it public anyway and nobody else will be able to read it.
 export const publishOwnRole = (gameCode, playerName, role) =>
   updateGame(gameCode, { [`revealed.${playerName}`]: role });
+
+export const publishRoles = (gameCode, roles) =>
+  updateGame(gameCode, Object.fromEntries(
+    Object.entries(roles).map(([name, role]) => [`revealed.${name}`, role])
+  ));
 
 // Task progress lives in a document only its owner can read, so the counts the
 // badges need have to be published by each player themselves.
@@ -404,38 +436,47 @@ export const submitVote = (gameCode, playerName, vote) =>
 // One name added rather than the whole list rewritten from what this phone
 // last saw: the vote closing writes that list too, and either write landing
 // second used to undo the other.
-export async function markKilledDuringMeeting(gameCode, crewmate, roles, gameDataForOutcome, killerName) {
-  const cooldownSeconds = gameDataForOutcome?.killCooldown || 0;
-  const nextKillList = [...new Set([...(gameDataForOutcome?.killList || []), crewmate])];
+//
+// Decided against the server's copy: a confirm that lands just after the vote
+// closed used to write a frozen cooldown nothing would ever resume, leaving the
+// traitor unable to kill for the rest of the round.
+export async function markKilledDuringMeeting(gameCode, crewmate, roles, killerName) {
+  try {
+    await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef(gameCode));
+      if (!snapshot.exists()) return;
+      const data = snapshot.data();
+      if (data.gameEnded || !data.gameStarted) return;
 
-  const ok = await updateGame(gameCode, {
-    killList: arrayUnion(crewmate),
-    [`revealed.${crewmate}`]: roles[crewmate],
-    // Firestore rejects undefined outright, which would fail the whole write
-    // and silently lose the kill rather than just the attribution.
-    ...(killerName ? { [`kills.${crewmate}`]: killerName } : {}),
-    ...(killerName && cooldownSeconds
-      ? { [`killCooldowns.${killerName}`]: frozenCooldownFor(cooldownSeconds) }
-      : {})
-  });
-  if (!ok) return false;
+      const cooldownSeconds = data.killCooldown || 0;
+      const killList = [...new Set([...(data.killList || []), crewmate])];
+      const revealed = { ...(data.revealed || {}), [crewmate]: roles[crewmate] };
+      const cooldown = data.meetingCalled ? frozenCooldownFor(cooldownSeconds) : cooldownExpiryFor(cooldownSeconds);
+      const winner = decideOutcomeFromCounts({ ...data, killList, revealed });
 
-  const winner = decideOutcomeFromCounts({
-    ...gameDataForOutcome,
-    killList: nextKillList,
-    revealed: { ...(gameDataForOutcome?.revealed || {}), [crewmate]: roles[crewmate] }
-  });
-  if (winner) {
-    await updateGame(gameCode, {
-      gameEnded: true,
-      winner,
-      winReason: 'kills',
-      meetingCalled: false,
-      voteDeadline: deleteField(),
-      resultUntil: deleteField()
+      tx.update(gameRef(gameCode), {
+        killList: arrayUnion(crewmate),
+        [`revealed.${crewmate}`]: roles[crewmate],
+        // Firestore rejects undefined outright, which would fail the whole write
+        // and silently lose the kill rather than just the attribution.
+        ...(killerName ? { [`kills.${crewmate}`]: killerName } : {}),
+        ...(killerName && cooldownSeconds ? { [`killCooldowns.${killerName}`]: cooldown } : {}),
+        ...(winner ? {
+          gameEnded: true,
+          winner,
+          winReason: 'kills',
+          endedAt: Date.now(),
+          meetingCalled: false,
+          voteDeadline: deleteField(),
+          resultUntil: deleteField()
+        } : {})
+      });
     });
+    return true;
+  } catch (error) {
+    console.warn('[meeting] could not mark the kill', error);
+    return false;
   }
-  return true;
 }
 
 // Any awake client may close the meeting; the transaction makes it happen once.

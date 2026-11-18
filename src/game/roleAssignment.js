@@ -1,3 +1,5 @@
+import { LONG, SHORT, lengthFor, roomFor } from './taskPacks';
+
 const IMPOSTER = 'Imposter';
 const CREWMATE = 'Crewmate';
 
@@ -35,8 +37,34 @@ export function selectImposters(players, weights, imposterCount) {
   return Array.from(selected);
 }
 
+// How badly a task fits beside the ones already dealt to this player: a second
+// task in the same room keeps them standing still, and a hand of short ones
+// is done in a minute. Typed tasks have no room or length, so they fit anywhere.
+function misfit(task, taken) {
+  const room = roomFor(task);
+  const sameRoom = room && taken.some((other) => roomFor(other) === room) ? 2 : 0;
+  const allShort = lengthFor(task) === SHORT && !taken.some((other) => lengthFor(other) === LONG) ? 1 : 0;
+  return sameRoom + allShort;
+}
+
+function bestFit(candidates, taken) {
+  let best = -1;
+  let bestScore = Infinity;
+  candidates.forEach((task, index) => {
+    if (taken.includes(task)) return;
+    const score = misfit(task, taken);
+    if (score < bestScore) {
+      best = index;
+      bestScore = score;
+    }
+  });
+  return { index: best, score: bestScore };
+}
+
 // Draws from one shared shuffled pool so tasks spread across the group, while
-// refilling whenever the pool holds nothing this crewmate is missing. Bounded
+// refilling whenever the pool holds nothing this crewmate is missing. Within
+// that, each player's hand is sent to different rooms with at least one long
+// task, reaching outside the pool only when the pool cannot manage it. Bounded
 // loops: perCrewmate never exceeds the task count, so a fresh task always exists.
 export function assignTasksEvenly(crewmates, tasks, tasksPerCrewmate) {
   const perCrewmate = Math.min(tasksPerCrewmate, tasks.length);
@@ -50,10 +78,18 @@ export function assignTasksEvenly(crewmates, tasks, tasksPerCrewmate) {
   for (let round = 0; round < perCrewmate; round++) {
     for (let i = 0; i < crewmates.length; i++) {
       const taken = assignedTasks[crewmates[i]];
-      let index = pool.findIndex((task) => !taken.includes(task));
+      let { index, score } = bestFit(pool, taken);
       if (index === -1) {
         pool = shuffleArray(tasks).filter((task) => !taken.includes(task));
-        index = 0;
+        ({ index, score } = bestFit(pool, taken));
+      }
+      if (score > 0) {
+        const anywhere = shuffleArray(tasks);
+        const better = bestFit(anywhere, taken);
+        if (better.score < score) {
+          taken.push(anywhere[better.index]);
+          continue;
+        }
       }
       taken.push(pool[index]);
       pool.splice(index, 1);

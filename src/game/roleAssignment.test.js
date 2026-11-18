@@ -1,3 +1,4 @@
+import { TASK_PACKS, LONG, lengthFor, roomFor, taskTexts } from './taskPacks';
 import {
   buildRound, calculateWeights, selectImposters, assignTasksEvenly
 } from './roleAssignment';
@@ -83,6 +84,22 @@ describe('assignTasksEvenly', () => {
   test('handles having no crewmates', () => {
     expect(assignTasksEvenly([], TASKS, 3)).toEqual({});
   });
+
+  test.each(TASK_PACKS.map((pack) => [pack.name, pack]))(
+    'with the %s pack, sends each hand to different rooms with a long task in it',
+    (name, pack) => {
+      const taskers = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+      for (let deal = 0; deal < 40; deal++) {
+        const assigned = assignTasksEvenly(taskers, taskTexts(pack), 3);
+        taskers.forEach((tasker) => {
+          const hand = assigned[tasker];
+          expect(hand).toHaveLength(3);
+          expect(new Set(hand.map(roomFor)).size).toBe(3);
+          expect(hand.some((task) => lengthFor(task) === LONG)).toBe(true);
+        });
+      }
+    }
+  );
 });
 
 describe('buildRound', () => {

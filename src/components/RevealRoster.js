@@ -26,7 +26,7 @@ function RosterGroup({ title, entries, winners, startIndex }) {
 }
 
 function RevealRoster({ roster, winner }) {
-  const { imposters, crewmates } = roster;
+  const { imposters, crewmates, pendingNames = [] } = roster;
   if (imposters.length === 0 && crewmates.length === 0) return null;
 
   // Whoever won is read first.
@@ -42,6 +42,11 @@ function RevealRoster({ roster, winner }) {
     <div className="reveal-roster">
       <RosterGroup {...first} winners startIndex={0} />
       <RosterGroup {...second} winners={false} startIndex={first.entries.length} />
+      {pendingNames.length > 0 && (
+        <p className="vote-progress">
+          Waiting for {pendingNames.join(', ')} to open the game and reveal their role.
+        </p>
+      )}
     </div>
   );
 }

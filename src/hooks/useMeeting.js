@@ -11,11 +11,33 @@ import { currentUid } from '../firebase';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { roleName } from '../game/terminology';
+import { withTimeout } from '../withTimeout';
 import { usePrivateRole } from './usePrivateRole';
 import { usePublishOutRoles } from './usePublishOutRoles';
 
+const CLOSE_WAIT_MS = 8000;
 const TYPEWRITER_MS = 40;
 const VERDICT_DELAY_MS = 700;
+// Past the deadline by this much on this phone's own clock, and watched for at
+// least this long, a phone may close the vote without having sat through all
+// of it. Phones keep their clocks within a second or two of each other; this
+// only has to rule out one set wildly wrong.
+const OVERDUE_MS = 30000;
+const MIN_WATCH_MS = 15000;
+
+const watchKey = (gameCode, deadline) => `fake-tasker:watching:${gameCode}:${deadline}`;
+
+function rememberedWatchStart(gameCode, deadline) {
+  try {
+    const stored = Number(sessionStorage.getItem(watchKey(gameCode, deadline)));
+    if (stored) return stored;
+    const now = Date.now();
+    sessionStorage.setItem(watchKey(gameCode, deadline), String(now));
+    return now;
+  } catch (error) {
+    return Date.now();
+  }
+}
 
 function useTypewriter(text, delayMs = 0) {
   const [shown, setShown] = useState('');
@@ -47,7 +69,7 @@ function useTypewriter(text, delayMs = 0) {
 
 export function useMeeting(gameCode) {
   const playerName = usePlayerName(gameCode);
-  const { gameData, loading, connected } = useGameSync(gameCode, playerName);
+  const { gameData, loading, connected, pendingWrites } = useGameSync(gameCode, playerName);
   const { privateData } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
 
@@ -84,14 +106,18 @@ export function useMeeting(gameCode) {
   // How long this client has actually watched the meeting. Elapsed local time
   // rather than a comparison against a deadline somebody else's clock wrote,
   // so a device set to the wrong time cannot end a vote the moment it opens.
+  //
+  // Kept across a reload: a tab iOS threw away mid-meeting used to start
+  // watching all over again, and if every phone had done that the vote sat at
+  // 0:00 for another full vote's length.
   const watchingSince = useRef(null);
   useEffect(() => {
-    if (!meetingCalled) {
+    if (!meetingCalled || !voteDeadline) {
       watchingSince.current = null;
       return;
     }
-    if (watchingSince.current === null) watchingSince.current = Date.now();
-  }, [meetingCalled]);
+    watchingSince.current = rememberedWatchStart(gameCode, voteDeadline);
+  }, [meetingCalled, voteDeadline, gameCode]);
 
   const closing = useRef(false);
   useEffect(() => {
@@ -106,11 +132,12 @@ export function useMeeting(gameCode) {
       const alive = alivePlayersOf(gameData);
       const everyoneVoted = alive.length === 0 || votesCastBy(gameData, alive) >= alive.length;
       const watchedFor = watchingSince.current === null ? 0 : Date.now() - watchingSince.current;
-      if (!everyoneVoted && watchedFor < VOTE_DURATION_MS) return;
+      const overdue = !!voteDeadline && Date.now() - voteDeadline > OVERDUE_MS && watchedFor >= MIN_WATCH_MS;
+      if (!everyoneVoted && watchedFor < VOTE_DURATION_MS && !overdue) return;
 
       if (!shouldResolveMeeting(gameData)) return;
       closing.current = true;
-      closeMeeting(gameCode).finally(() => { closing.current = false; });
+      withTimeout(closeMeeting(gameCode), CLOSE_WAIT_MS).catch(() => {}).finally(() => { closing.current = false; });
     };
 
     // Tried on this phone's turn and then every second, so a vote whose time
@@ -125,7 +152,7 @@ export function useMeeting(gameCode) {
       clearTimeout(first);
       if (retry) clearInterval(retry);
     };
-  }, [gameData, meetingCalled, gameCode, myTurnDelay]);
+  }, [gameData, meetingCalled, gameCode, myTurnDelay, voteDeadline]);
 
   useEffect(() => {
     if (!meetingCalled || !voteDeadline) {
@@ -148,8 +175,8 @@ export function useMeeting(gameCode) {
 
     setKillDialogOpen(false);
     setSelectedKillPlayer('');
-    await markKilledDuringMeeting(gameCode, selectedKillPlayer, meeting.roles, gameData, playerName);
-  }, [gameCode, selectedKillPlayer, meeting.roles, gameData, playerName]);
+    await markKilledDuringMeeting(gameCode, selectedKillPlayer, meeting.roles, playerName);
+  }, [gameCode, selectedKillPlayer, meeting.roles, playerName]);
 
 
   const actions = useMemo(() => ({
@@ -172,6 +199,7 @@ export function useMeeting(gameCode) {
       killDialogOpen,
       secondsLeft,
       voteTotalSeconds: VOTE_DURATION_MS / 1000,
+      voteSending: !!meeting.myVote && pendingWrites,
       displayedResult,
       displayedVerdict,
       verdictText,
