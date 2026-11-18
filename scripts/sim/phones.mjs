@@ -110,15 +110,19 @@ export class Phone {
       userAgent: IPHONE_UA
     });
     await this.context.addInitScript(VISIBILITY_SHIM);
+    await this.newPage();
+    return this;
+  }
+
+  async newPage() {
     this.page = await this.context.newPage();
-    this.cdp = await this.context.newCDPSession(this.page);
+    this.cdp = await this.context.newCDPSession(this.page).catch(() => null);
     this.page.on('console', (msg) => {
       if (msg.type() === 'error' || msg.type() === 'warning') {
         this.logs.push(`[${new Date().toISOString().slice(11, 23)}] ${msg.type()}: ${msg.text().slice(0, 300)}`);
       }
     });
     this.page.on('pageerror', (error) => this.logs.push(`pageerror: ${error.message}`));
-    return this;
   }
 
   async close() {
@@ -153,8 +157,7 @@ export class Phone {
     if (discarded) {
       const url = this.page.url();
       await this.page.close();
-      this.page = await this.context.newPage();
-      this.cdp = await this.context.newCDPSession(this.page);
+      await this.newPage();
       await this.page.goto(url);
     } else {
       await this.cdp.send('Page.setWebLifecycleState', { state: 'active' });

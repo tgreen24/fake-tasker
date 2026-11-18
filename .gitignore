@@ -31,3 +31,4 @@ yarn-error.log*
 # firebase emulator logs
 firestore-debug.log
 ui-debug.log
+firebase-debug.log

@@ -1,12 +1,14 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { Phone, pause, readGame, readSeat, serve, until } from './phones.mjs';
 import {
-  BASE, Phone, expectedPath, pause, readGame, readSeat, serve, until
-} from './phones.mjs';
+  NAMES as ALL_NAMES, callMeeting, createGame, doTasks, join, screenProblem, seats,
+  setUpLobby, startRound, vote, waitForRoundScreen
+} from './game.mjs';
 
 const VOTE_MS = Number(process.env.SIM_VOTE_MS || 20000);
 const RECOVER_MS = 6000;
-const NAMES = ['Ava', 'Ben', 'Cal', 'Dee', 'Eli', 'Fay'];
+const NAMES = ALL_NAMES.slice(0, 6);
 const only = [...process.argv.slice(2), ...(process.env.SIM_ONLY || '').split(',').filter(Boolean)];
 
 const results = [];
@@ -15,59 +17,6 @@ let current = '';
 function record(check, pass, detail = '') {
   results.push({ scenario: current, check, pass, detail });
   console.log(`  ${pass ? 'PASS' : 'FAIL'}  ${check}${detail ? `  (${detail})` : ''}`);
-}
-
-// ── game steps, all through the real UI ──
-
-async function createGame(host) {
-  await host.goto('/');
-  await host.page.locator('.name-input').fill(host.name);
-  await host.button('Create Game').click();
-  await host.page.waitForURL(/\/lobby\/[A-Z0-9]{6}$/, { timeout: 15000 });
-  return host.path().split('/').pop();
-}
-
-async function join(phone, code) {
-  await phone.goto(`/j/${code}`);
-  await phone.page.locator('.join-input').fill(phone.name);
-  await phone.button('Join Game').click();
-  await phone.page.waitForURL(/\/lobby\//, { timeout: 15000 });
-}
-
-async function setUpLobby(host, code, { tasksEach = 2 } = {}) {
-  await host.page.locator('.task-editor summary').click();
-  await host.page.getByRole('button', { name: /^Use House pack/ }).click();
-  await until(async () => ((await readGame(code)).tasks || []).length > 10, { what: 'pack tasks' });
-  await host.page.locator('.task-count-selection select').selectOption(String(tasksEach));
-  await host.page.locator('.kill-cooldown-selection select').selectOption('10');
-  await until(async () => (await readGame(code)).tasksPerCrewmate === tasksEach, { what: 'tasks each' });
-}
-
-async function startRound(host, code) {
-  await host.button('Start Game').click();
-  await until(async () => (await readGame(code)).gameStarted, { what: 'round to start' });
-}
-
-async function seats(code, names) {
-  const out = {};
-  for (const name of names) out[name] = await readSeat(code, name);
-  return out;
-}
-
-// Every awake phone on the screen the server says it should be on, showing
-// something real rather than a spinner or a missing role.
-async function screenProblem(phone, code) {
-  const game = await readGame(code);
-  const want = expectedPath(game, phone.name, code);
-  const have = phone.path();
-  if (have !== want) return `on ${have}, should be on ${want}`;
-  const text = await phone.text();
-  if (/Loading…/.test(text) && text.length < 40) return 'stuck on Loading…';
-  if (/Your role has not arrived/.test(text)) return 'role has not arrived';
-  if (want.startsWith('/countdown') && !/You are|Assigning roles|Meeting adjourned/.test(text)) {
-    return 'round screen without a role';
-  }
-  return null;
 }
 
 async function settled(phones, code, { timeout = RECOVER_MS, label = 'every phone on the right screen' } = {}) {
@@ -98,42 +47,24 @@ async function recovers(phone, code, label) {
   }
 }
 
-async function waitForRoundScreen(phone) {
-  await phone.button('🚨 Emergency Meeting').waitFor({ timeout: 20000 });
-}
-
-async function callMeeting(phone, code) {
-  await waitForRoundScreen(phone);
-  await phone.button('🚨 Emergency Meeting').click();
-  await until(async () => (await readGame(code)).meetingCalled, { what: 'meeting to open' });
-}
-
-async function vote(phone, target) {
-  await phone.page.getByRole('button', { name: target === 'skip' ? 'Skip the vote' : `Vote for ${target}`, exact: true })
-    .click({ timeout: 15000 });
-  await phone.button('Submit Vote').click();
-}
-
-async function doTasks(phone, tasks) {
-  for (const task of tasks) {
-    await phone.page.getByRole('button', { name: task, exact: true }).click({ timeout: 15000 });
-    await pause(300);
-  }
-}
-
 // A fresh game of six with one traitor, everyone on the round screen.
-async function freshRound(browser, { tasksEach = 2 } = {}) {
+async function freshRound(browser, { tasksEach = 2, traitors = 1 } = {}) {
   const phones = await Promise.all(NAMES.map((name) => new Phone(browser, name).open()));
   const [host, ...others] = phones;
   const code = await createGame(host);
   for (const phone of others) await join(phone, code);
   await setUpLobby(host, code, { tasksEach });
+  if (traitors > 1) {
+    await host.page.locator('.imposter-select select').selectOption(String(traitors));
+    await until(async () => (await readGame(code)).imposterCount === traitors, { what: 'traitor count' });
+  }
   await startRound(host, code);
   const dealt = await seats(code, NAMES);
   const traitor = NAMES.find((name) => dealt[name].role === 'Imposter');
-  const taskers = NAMES.filter((name) => name !== traitor);
+  const traitorNames = NAMES.filter((name) => dealt[name].role === 'Imposter');
+  const taskers = NAMES.filter((name) => dealt[name].role !== 'Imposter');
   const byName = Object.fromEntries(phones.map((phone) => [phone.name, phone]));
-  return { phones, host, code, dealt, traitor, taskers, byName };
+  return { phones, host, code, dealt, traitor, traitorNames, taskers, byName };
 }
 
 // ── scenarios ──
@@ -405,6 +336,82 @@ const scenarios = {
     return game.phones;
   },
 
+  async 'the old browser cannot take the seat back'(browser) {
+    const game = await freshRound(browser);
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const name = game.taskers[2];
+    const old = game.byName[name];
+    const fresh = await new Phone(browser, name).open();
+    await fresh.goto(`/j/${game.code}`);
+    await fresh.page.locator('.join-input').fill(name);
+    await fresh.button('Join Game').click();
+    await fresh.button(`That's me — take ${name}'s seat`).click({ timeout: 8000 });
+    await game.host.button(`Let ${name} back in`).click({ timeout: 8000 });
+    await recovers(fresh, game.code, `${name} plays from the new browser`);
+    const handedTo = (await readGame(game.code)).playerUids[name];
+    await old.reload();
+    await pause(5000);
+    record('the old tab leaves the seat where the host put it', (await readGame(game.code)).playerUids[name] === handedTo);
+    record('the old tab offers to ask for it instead', /in use on another phone/.test(await old.text()));
+    record('the new browser still has its role', !(await screenProblem(fresh, game.code)));
+    await fresh.close();
+    return game.phones;
+  },
+
+  async 'sent to the home screen mid-round'(browser) {
+    const game = await freshRound(browser);
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const lost = game.byName[game.taskers[1]];
+    await lost.goto('/');
+    await lost.button(`Back to game ${game.code} as ${lost.name}`).click({ timeout: 8000 })
+      .then(() => record('home offers the way back', true))
+      .catch(() => record('home offers the way back', false));
+    await recovers(lost, game.code, 'one tap puts them back in the round');
+    return game.phones;
+  },
+
+  async 'a vote sent over a dead connection'(browser) {
+    const game = await freshRound(browser);
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const voter = game.byName[game.taskers[1]];
+    await callMeeting(game.byName[game.taskers[0]], game.code);
+    await voter.page.getByRole('button', { name: 'Skip the vote', exact: true }).click({ timeout: 15000 });
+    const hung = [];
+    await voter.context.route(/:8080\//, (route) => hung.push(route));
+    await voter.button('Submit Vote').click();
+    await pause(2000);
+    record('the voter is told it is still sending', /Sending your vote/.test(await voter.text()));
+    record('and it really has not arrived', !((await readGame(game.code)).votes || {})[voter.name]);
+    await voter.context.unroute(/:8080\//);
+    await until(async () => ((await readGame(game.code)).votes || {})[voter.name], { timeout: 20000, what: 'vote' })
+      .then(({ ms }) => record('the vote arrives once the connection is back', true, `${ms}ms`))
+      .catch(() => record('the vote arrives once the connection is back', false));
+    await until(async () => /You skipped voting/.test(await voter.text()), { timeout: 8000, what: 'confirmed' })
+      .then(() => record('and the screen says so', true))
+      .catch(() => record('and the screen says so', false));
+    hung.forEach((route) => route.abort().catch(() => {}));
+    return game.phones;
+  },
+
+  async 'opening the game with no way to reach it'(browser) {
+    const game = await freshRound(browser);
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const phone = game.byName[game.taskers[3]];
+    const hung = [];
+    await phone.context.route(/:8080\//, (route) => hung.push(route));
+    await phone.reload();
+    await until(async () => /Can't reach game/.test(await phone.text()), { timeout: 25000, what: 'way out' })
+      .then(({ ms }) => record('it offers Try Again and Leave instead of loading forever', true, `${ms}ms`))
+      .catch(async () => record('it offers Try Again and Leave instead of loading forever', false, (await phone.text()).slice(0, 80)));
+    record('it was not sent to the home screen', phone.path() !== '/');
+    await phone.context.unroute(/:8080\//);
+    hung.forEach((route) => route.abort().catch(() => {}));
+    await phone.button('Try Again').click({ timeout: 3000 }).catch(() => {});
+    phone.wokeAt = Date.now();
+    await recovers(phone, game.code, 'Try Again gets back into the round');
+    return game.phones;
+  },
+
   async 'back in from a different browser in the lobby'(browser) {
     const phones = await Promise.all(NAMES.map((name) => new Phone(browser, name).open()));
     const [host, ...others] = phones;
@@ -449,6 +456,24 @@ const scenarios = {
     record('the real player keeps their seat', seat.uid !== null && (await readGame(game.code)).playerUids[victim] === seat.uid);
     await settled(game.phones, game.code, { timeout: 5000, label: 'the real players are undisturbed' });
     await spy.close();
+    return game.phones;
+  },
+
+  async 'a traitor\'s phone is locked when the taskers win'(browser) {
+    const game = await freshRound(browser, { tasksEach: 1, traitors: 2 });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const [awakeTraitor, lockedTraitor] = game.traitorNames;
+    await game.byName[lockedTraitor].sleep();
+    for (const name of game.taskers) await doTasks(game.byName[name], game.dealt[name].tasks);
+    await until(async () => (await readGame(game.code)).gameEnded, { what: 'game over', timeout: 15000 });
+    const watcher = game.byName[game.taskers[0]];
+    await until(async () => {
+      const text = await watcher.text();
+      return text.includes(lockedTraitor) && text.includes(awakeTraitor) && !/Waiting for .* to open the game/.test(text);
+    }, { timeout: 8000, what: 'full reveal' })
+      .then(({ ms }) => record('the locked traitor is still revealed at game over', true, `${ms}ms`))
+      .catch(() => record('the locked traitor is still revealed at game over', false));
+    await game.byName[lockedTraitor].wake();
     return game.phones;
   },
 
