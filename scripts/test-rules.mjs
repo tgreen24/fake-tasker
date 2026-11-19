@@ -306,6 +306,12 @@ await check('that transaction cannot smuggle in a host-only field',
     tx.update(doc(player, 'games', CODE), { tasksCompleted: increment(1), tasks: ['Anything'] });
   })));
 
+await check('a player cannot turn Lockdown on for the game',
+  assertFails(updateDoc(doc(player, 'games', CODE), { lockdownEnabled: true })));
+
+await check('the host can turn Lockdown on',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { lockdownEnabled: true })));
+
 await testEnv.cleanup();
 
 const failed = results.filter(([, ok]) => !ok);

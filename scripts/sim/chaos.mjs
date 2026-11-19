@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit } from 'playwright';
 import { Phone, pause, readGame, serve, until } from './phones.mjs';
-import { NAMES, createGame, join, screenProblem, setUpLobby, startRound } from './game.mjs';
+import { NAMES, createGame, enableLockdown, join, screenProblem, setUpLobby, startRound } from './game.mjs';
 import { playLikeAPerson } from './players.mjs';
 
 // Whole games played by eight phones while their owners keep locking them,
@@ -80,7 +80,7 @@ async function watch(phones, code, stop, round) {
     await pause(2000);
     const game = await readGame(code).catch(() => null);
     if (!game) continue;
-    const fingerprint = JSON.stringify([game.gameStarted, game.gameEnded, game.meetingCalled, game.resultUntil]);
+    const fingerprint = JSON.stringify([game.gameStarted, game.gameEnded, game.meetingCalled, game.resultUntil, !!game.lockdown]);
     if (fingerprint !== lastRoute) {
       lastRoute = fingerprint;
       routeSince = Date.now();
@@ -111,10 +111,26 @@ async function watch(phones, code, stop, round) {
 
 async function watchMeetings(code, stop, round) {
   let openedAt = null;
+  let lockdownSeen = null;
+  let lockdownReported = null;
   while (!stop.done) {
     await pause(1000);
     const game = await readGame(code).catch(() => null);
     if (!game) continue;
+    const lockdown = game.lockdown;
+    if (lockdown && lockdownSeen !== lockdown.startedAt) {
+      lockdownSeen = lockdown.startedAt;
+      log(`lockdown starts, ${lockdown.needed} codes needed`);
+    }
+    if (!lockdown && lockdownSeen) {
+      log(game.gameEnded && game.winReason === 'lockdown' ? 'lockdown was never lifted' : 'lockdown lifted');
+      lockdownSeen = null;
+    }
+    if (lockdown && Date.now() > lockdown.until + 12000 && lockdownReported !== lockdown.startedAt) {
+      lockdownReported = lockdown.startedAt;
+      problems.push({ round, phone: 'everyone', problem: 'a lockdown outlived its timer', at: stamp() });
+      log('STUCK lockdown outlived its timer');
+    }
     if (game.meetingCalled && !openedAt) openedAt = Date.now();
     if (!game.meetingCalled && openedAt) {
       log(`meeting lasted ${Math.round((Date.now() - openedAt) / 1000)}s`);
@@ -139,6 +155,7 @@ for (const phone of others) await join(phone, code);
 await setUpLobby(host, code, { tasksEach: 3 });
 await host.page.locator('.imposter-select select').selectOption('2');
 await until(async () => (await readGame(code)).imposterCount === 2, { what: 'two traitors' });
+if (process.env.CHAOS_LOCKDOWN !== '0') await enableLockdown(host, code);
 console.log(`chaos on ${process.env.SIM_ENGINE || 'chromium'}: game ${code}, ${phones.length} phones, ${ROUNDS} rounds`);
 
 const outcomes = [];
@@ -203,6 +220,9 @@ server.close();
 
 const disruptions = events.filter((line) => / (locks|stalls|naps|discards|reloads|loses signal) /.test(line)).length;
 console.log(`\n${disruptions} disruptions across ${ROUNDS} rounds`);
+const lockdowns = events.filter((line) => /lockdown starts/.test(line)).length;
+const lifted = events.filter((line) => /lockdown lifted$/.test(line)).length;
+console.log(`${lockdowns} lockdowns, ${lifted} lifted`);
 outcomes.forEach((line) => console.log(`  ${line}`));
 if (problems.length) {
   console.log(`\n${problems.length} problems:`);

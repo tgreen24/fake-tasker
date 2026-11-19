@@ -28,6 +28,29 @@ export async function setUpLobby(host, code, { tasksEach = 2 } = {}) {
   await until(async () => (await readGame(code)).tasksPerCrewmate === tasksEach, { what: 'tasks each' });
 }
 
+export async function enableLockdown(host, code) {
+  await host.page.locator('.toggle-setting input[type="checkbox"]').check();
+  await until(async () => (await readGame(code)).lockdownEnabled, { what: 'lockdown on' });
+}
+
+export async function startLockdown(traitor, code) {
+  const button = traitor.button('🔒 Start Lockdown');
+  await until(async () => (await button.count()) && (await button.isEnabled()), { what: 'lockdown ready', timeout: 20000 });
+  await button.click();
+  await until(async () => !!(await readGame(code)).lockdown, { what: 'lockdown to start' });
+}
+
+export async function solveLockdownPuzzle(phone) {
+  for (let n = 1; n <= 9; n++) {
+    await phone.page.locator('.lockdown').getByRole('button', { name: `Tap ${n}`, exact: true }).click({ timeout: 10000 });
+  }
+}
+
+export async function enterLockdownCode(phone, code) {
+  await phone.page.locator('.lockdown-input').fill(code);
+  await phone.button('Enter Code').click();
+}
+
 export async function startRound(host, code) {
   await host.button('Start Game').click();
   await until(async () => (await readGame(code)).gameStarted, { what: 'round to start' });

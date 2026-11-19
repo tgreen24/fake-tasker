@@ -26,7 +26,7 @@ function GameLobby() {
 
   const {
     players, tasks, maxPlayers, playerName, isCreator,
-    imposterCount, tasksPerCrewmate, killCooldown,
+    imposterCount, tasksPerCrewmate, killCooldown, lockdownEnabled,
     imposterOptions, taskCountOptions, colors,
     newTask, starting, errorMessage, activePack, seatRequests, dealtSeats, seatLost
   } = state;
@@ -79,6 +79,10 @@ function GameLobby() {
 
         {errorMessage && <p className="error-message">{errorMessage}</p>}
 
+        {lockdownEnabled && !isCreator && (
+          <p className="vote-progress">🔒 Lockdown sabotage is on this game.</p>
+        )}
+
         <HowToPlay />
 
         <LeaveGame gameCode={gameCode} playerName={playerName} />
@@ -120,6 +124,18 @@ function GameLobby() {
                 ))}
               </select>
             </div>
+
+            <label className="toggle-setting">
+              <span>
+                🔒 Lockdown sabotage
+                <small>{roleNamePlural('Imposter')} can lock everyone down; pass codes to lift it</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={lockdownEnabled}
+                onChange={(e) => actions.updateSetting('lockdownEnabled', e.target.checked)}
+              />
+            </label>
 
             <div className="task-count-selection">
               <label>Tasks each:</label>

@@ -119,6 +119,7 @@ function Home() {
         </button>
         <button className="join-button" onClick={handleJoinGame} disabled={creating}>Join Game</button>
         {errorMessage && <p className="error-message">{errorMessage}</p>}
+        <button className="leave-game" onClick={() => navigate('/practice')}>Practice minigames</button>
       </div>
     </div>
   );

@@ -9,8 +9,9 @@ import { VOTE_DURATION_MS, resolveVote, shouldResolveMeeting, validVotesOf } fro
 import { decideOutcomeFromCounts } from './outcome';
 import {
   SABOTAGE_COOLDOWN_SECONDS, cooldownExpiryFor, frozenCooldownFor,
-  pauseCooldowns, resumeCooldowns
+  pauseCooldown, pauseCooldowns, resumeCooldown, resumeCooldowns
 } from './cooldown';
+import { LOCKDOWN_COOLDOWN_SECONDS } from './lockdown';
 
 import { GAME_LIFETIME_MS, MAX_PLAYERS } from './constants';
 
@@ -226,6 +227,9 @@ function dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, play
     voteLog: [],
     taskCounts: {},
     finishedAt: {},
+    // Not in the opening minutes: nobody has spread out yet.
+    lockdownCooldown: cooldownExpiryFor(LOCKDOWN_COOLDOWN_SECONDS),
+    lockdown: deleteField(),
     endedAt: deleteField(),
     gameStarted: true,
     gameEnded: false,
@@ -261,6 +265,8 @@ export const endRound = (gameCode) => updateGame(gameCode, {
   voteLog: [],
   taskCounts: {},
   finishedAt: {},
+  lockdown: deleteField(),
+  lockdownCooldown: deleteField(),
   endedAt: deleteField(),
   voteDeadline: deleteField(),
   votingResult: deleteField(),
@@ -282,6 +288,8 @@ export const returnToLobby = (gameCode) => updateGame(gameCode, {
   voteLog: [],
   taskCounts: {},
   finishedAt: {},
+  lockdown: deleteField(),
+  lockdownCooldown: deleteField(),
   endedAt: deleteField(),
   voteDeadline: deleteField(),
   votingResult: deleteField(),
@@ -401,6 +409,7 @@ export async function callMeeting(gameCode, playerName) {
       // it catches up, and a press in that moment used to restart the meeting
       // everyone was already in, wiping the votes cast so far.
       if (data.meetingCalled || data.gameEnded || !data.gameStarted) return;
+      if (data.lockdown) return;
       if ((data.killList || []).includes(playerName)) return;
       const now = Date.now();
 
@@ -412,6 +421,7 @@ export async function callMeeting(gameCode, playerName) {
         sabotages: {},
         killCooldowns: pauseCooldowns(data.killCooldowns, now),
         sabotageCooldowns: pauseCooldowns(data.sabotageCooldowns, now),
+        ...(data.lockdownCooldown ? { lockdownCooldown: pauseCooldown(data.lockdownCooldown, now) } : {}),
         votingResult: deleteField(),
         resultUntil: deleteField(),
         ejected: deleteField()
@@ -515,6 +525,7 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
         resultUntil: Date.now() + RESULT_DISPLAY_MS,
         killCooldowns: resumeCooldowns(data.killCooldowns),
         sabotageCooldowns: resumeCooldowns(data.sabotageCooldowns),
+        ...(data.lockdownCooldown ? { lockdownCooldown: resumeCooldown(data.lockdownCooldown) } : {}),
         voteDeadline: deleteField(),
         ...(votedOut ? { killList: nextKillList } : {}),
         ...(winner ? {
@@ -530,3 +541,4 @@ export async function closeMeeting(gameCode, { force = false } = {}) {
     console.warn('[voting] could not close the meeting', error);
   }
 }
+

@@ -1,5 +1,5 @@
 import { pause, readGame, readSeat } from './phones.mjs';
-import { vote } from './game.mjs';
+import { enterLockdownCode, solveLockdownPuzzle, vote } from './game.mjs';
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const between = (low, high) => low + Math.random() * (high - low);
@@ -35,6 +35,25 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
     const seat = await readSeat(code, me);
     if (!seat) return;
 
+    // A lockdown comes first, the way it would for a person. Only the
+    // receiver's side needs doing: the code is read where the giver would have
+    // said it out loud.
+    if (game.lockdown && await phone.page.locator('.lockdown').count()) {
+      if (await phone.page.locator('.lockdown .tap-in-order').count()) {
+        await solveLockdownPuzzle(phone);
+        log(`${me} solved the lockdown puzzle`);
+        return;
+      }
+      const mine = game.lockdown.pairs.find((pair) => pair.receivers.includes(me));
+      const traitorHoldingOut = seat.role === 'Imposter' && Math.random() < 0.7;
+      if (mine && !game.lockdown.entered?.[me] && !traitorHoldingOut && Math.random() < 0.3
+        && await phone.page.locator('.lockdown-input').count()) {
+        await enterLockdownCode(phone, mine.code);
+        log(`${me} entered a lockdown code`);
+        return;
+      }
+    }
+
     if (seat.role === 'Crewmate') {
       const todo = (seat.tasks || []).filter((task) => !(seat.completedTasks || []).includes(task));
       if (todo.length && Math.random() < 0.25) {
@@ -45,6 +64,12 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
     } else if (seat.role === 'Imposter') {
       const targets = alive.filter((name) => name !== me && (seat.roleMap || {})[name] !== 'Imposter');
       const cooling = /kill cooldown/i.test(await phone.text());
+      const lockdownButton = phone.button('🔒 Start Lockdown');
+      if (await lockdownButton.count() && await lockdownButton.isEnabled() && Math.random() < 0.04) {
+        await lockdownButton.click({ timeout: 1500 });
+        log(`${me} started a lockdown`);
+        return;
+      }
       if (targets.length && !cooling && Math.random() < 0.08) {
         const target = pick(targets);
         await phone.page.getByRole('button', { name: target, exact: true }).click({ timeout: 1500 });

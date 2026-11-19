@@ -53,6 +53,16 @@ function HowToPlay() {
         </section>
 
         <section>
+          <h4>Lockdown (if the host turns it on)</h4>
+          <p>
+            A traitor can set off a lockdown. Everyone still in is paired up: one
+            of you is given a code, the other has to find them and type it in.
+            Solve the quick puzzle first to see or enter your code. Get enough
+            codes in before the timer runs out, or the traitors win. No meetings
+            until it is lifted.
+          </p>
+        </section>
+        <section>
           <h4>House rules worth agreeing first</h4>
           <p>
             Which rooms are in play, whether upstairs counts, and how long you

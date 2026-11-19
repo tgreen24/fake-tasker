@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { Phone, pause } from './phones.mjs';
 
@@ -6,6 +7,10 @@ import { Phone, pause } from './phones.mjs';
 //   node scripts/sim/bots.mjs ABC123 5          five bots join game ABC123
 //   node scripts/sim/bots.mjs --host 5          a bot hosts a new game; you join it
 //   BOT_BASE=http://localhost:3000 …            against a local dev server instead
+//
+// Lockdown: a bot hands its code straight to another bot, and prints any code
+// meant for a person. A code a person gives a bot goes in sim-results/bot-inbox.txt
+// as a line like "Bot Ava K7M-4QX" (or BOT_INBOX for another file).
 //
 // Bots read only their own screens -- they cannot see the database -- so they
 // play the way a person holding that phone would. Ctrl-C to stop them.
@@ -16,6 +21,20 @@ const hosting = args.includes('--host');
 const [codeArg, countArg] = args.filter((arg) => arg !== '--host');
 const count = Number(hosting ? codeArg || 5 : countArg || 5);
 const NAMES = ['Ava', 'Ben', 'Cal', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal', 'Ivy', 'Jo'];
+
+const INBOX = process.env.BOT_INBOX || 'sim-results/bot-inbox.txt';
+const codesFromBots = {};
+
+function inboxCodeFor(name) {
+  let lines = [];
+  try {
+    lines = readFileSync(INBOX, 'utf8').split('\n');
+  } catch {
+    return null;
+  }
+  const line = lines.reverse().find((entry) => entry.toLowerCase().startsWith(`${name.toLowerCase()} `));
+  return line ? line.slice(name.length).trim() : null;
+}
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const between = (low, high) => low + Math.random() * (high - low);
@@ -29,9 +48,47 @@ async function unpressed(phone, scope) {
   return labels.filter(Boolean);
 }
 
+async function lockdownTurn(phone, state, text) {
+  const panel = phone.page.locator('.lockdown');
+  if (await panel.locator('.tap-in-order').count()) {
+    await pause(between(2000, 6000));
+    for (let n = 1; n <= 9; n++) await panel.getByRole('button', { name: `Tap ${n}`, exact: true }).click();
+    say(`${phone.name} solved the lockdown puzzle`);
+    return;
+  }
+
+  const shown = phone.page.locator('.lockdown-code');
+  if (await shown.count()) {
+    const code = (await shown.innerText()).trim();
+    if (state.announced === code) return;
+    state.announced = code;
+    codesFromBots[phone.name] = code;
+    const to = (await panel.locator('.lockdown-step p').first().innerText()).replace(/^Give this code to |:$/g, '');
+    const people = to.split(/, | and /).filter((name) => !name.startsWith('Bot '));
+    if (people.length) say(`🔑 ${phone.name} gives code ${code} to ${people.join(' and ')}`);
+    return;
+  }
+
+  const entry = phone.page.locator('.lockdown-entry');
+  if (!(await entry.count()) || /You are the Traitor/.test(text)) return;
+  const from = (await entry.locator('strong').innerText()).trim();
+  const code = codesFromBots[from] || inboxCodeFor(phone.name);
+  if (!code || state.tried === code) return;
+  state.tried = code;
+  await pause(between(2000, 8000));
+  await phone.page.locator('.lockdown-input').fill(code);
+  await phone.button('Enter Code').click();
+  say(`${phone.name} entered the code from ${from}`);
+}
+
 async function turn(phone, state) {
   const path = new URL(phone.page.url()).pathname;
   const text = await phone.page.locator('body').innerText().catch(() => '');
+
+  if (path.startsWith('/countdown') && await phone.page.locator('.lockdown').count()) {
+    await lockdownTurn(phone, state, text);
+    return;
+  }
 
   if (path.startsWith('/voting')) {
     const ballot = phone.page.getByRole('button', { name: /^Vote for |^Skip the vote$/ });
@@ -53,6 +110,14 @@ async function turn(phone, state) {
       await phone.page.getByRole('button', { name: pick(todo), exact: true }).click();
       say(`${phone.name} did a task`);
     }
+  }
+
+  const lockdownButton = phone.button('🔒 Start Lockdown');
+  if (/You are the Traitor/.test(text) && await lockdownButton.count() && await lockdownButton.isEnabled()
+    && Math.random() < 0.02) {
+    await lockdownButton.click();
+    say(`${phone.name} started a lockdown`);
+    return;
   }
 
   if (/You are the Traitor/.test(text) && !/kill cooldown/i.test(text) && Math.random() < 0.05) {

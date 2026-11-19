@@ -12,6 +12,7 @@ import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
 import { usePrivateRole } from './usePrivateRole';
 import { usePublishOutRoles } from './usePublishOutRoles';
+import { useLockdown } from './useLockdown';
 import { withTimeout } from '../withTimeout';
 
 const TASK_WAIT_MS = 10000;
@@ -34,6 +35,7 @@ export function useCountdown(gameCode) {
   const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
   useSettleOutcome(gameCode, gameData);
   usePublishOutRoles(gameCode, gameData, playerName, privateData);
+  const lockdown = useLockdown(gameCode, gameData, playerName, privateData);
 
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
@@ -203,6 +205,7 @@ export function useCountdown(gameCode) {
       awaitingOthers: round.awaitingReveal.filter((name) => name !== playerName)
     },
     actions,
+    lockdown,
     loading: loading || roleLoading,
     connected
   };

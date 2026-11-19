@@ -8,6 +8,7 @@ import Countdown from './Countdown';
 import GameOver from './GameOver';
 import Debug from './Debug';
 import VotingPage from './VotingPage';
+import Practice from './Practice';
 import { useAuthReady } from './hooks/useAuthReady';
 import './App.css';
 
@@ -47,6 +48,7 @@ function App() {
         <Route path="/countdown/:gameCode" element={<Countdown />} />
         <Route path="/gameover/:gameCode" element={<GameOver />} />
         <Route path="/voting/:gameCode" element={<VotingPage />} />
+        <Route path="/practice" element={<Practice />} />
         <Route path="/debug" element={<Debug />} />
       </Routes>
     </Router>

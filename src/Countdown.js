@@ -11,10 +11,12 @@ import LeaveGame from './components/LeaveGame';
 import ConfirmButton from './components/ConfirmButton';
 import SeatRequests from './components/SeatRequests';
 import ClaimSeat from './components/ClaimSeat';
+import LockdownPanel from './components/lockdown/LockdownPanel';
+import LockdownTrigger from './components/lockdown/LockdownTrigger';
 
 function Countdown() {
   const { gameCode } = useParams();
-  const { state, actions, loading, connected } = useCountdown(gameCode);
+  const { state, actions, lockdown, loading, connected } = useCountdown(gameCode);
 
   if (loading) {
     return <LoadingScreen className="countdown-screen" connected={connected} gameCode={gameCode} />;
@@ -65,6 +67,19 @@ function Countdown() {
               <p className={`reveal-notice landed ${lateReveal.role}`} role="status">
                 {lateReveal.name} was {lateReveal.role === 'Imposter' ? 'the' : 'not the'} {roleName('Imposter')}
               </p>
+            )}
+
+            {lockdown.state.justLifted && (
+              <p className="reveal-notice landed lockdown-lifted" role="status">🔓 Lockdown lifted!</p>
+            )}
+            {lockdown.state.active && (
+              <LockdownPanel
+                key={lockdown.state.startedAt}
+                gameCode={gameCode}
+                playerName={playerName}
+                lockdown={lockdown.state}
+                onEnterCode={lockdown.actions.enterCode}
+              />
             )}
 
             {role ? (
@@ -151,6 +166,13 @@ function Countdown() {
                     tone="warn"
                   />
                 )}
+                {lockdown.state.enabled && !lockdown.state.active && (
+                  <LockdownTrigger
+                    cooldownLeft={lockdown.state.cooldownLeft}
+                    cooldownTotal={lockdown.state.cooldownTotal}
+                    onStart={lockdown.actions.start}
+                  />
+                )}
                 {fellowImposters.length > 0 && (
                   <div className="fellow-imposters">
                     <p>Other {roleNamePlural('Imposter')}: {fellowImposters.join(', ')}</p>
@@ -213,7 +235,7 @@ function Countdown() {
             </div>
 
             <div className="buttons">
-              {role && !isDead && !tasksBlocked && (
+              {role && !isDead && !tasksBlocked && !lockdown.state.active && (
                 <button className="emergency-meeting-btn" onClick={actions.callMeeting}>
                   🚨 Emergency Meeting
                 </button>

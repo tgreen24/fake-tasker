@@ -9,7 +9,8 @@ const WIN_REASONS = {
   'imposters-ejected': `Every ${roleNameLower('Imposter')} was exiled`,
   kills: `The ${roleNameLowerPlural('Crewmate')} were outnumbered`,
   ejection: `The ${roleNameLowerPlural('Crewmate')} exiled one of their own`,
-  outnumbered: `The ${roleNameLowerPlural('Crewmate')} were outnumbered`
+  outnumbered: `The ${roleNameLowerPlural('Crewmate')} were outnumbered`,
+  lockdown: 'The lockdown was never lifted'
 };
 
 // Older rounds recorded only who won, so fall back rather than inventing one.

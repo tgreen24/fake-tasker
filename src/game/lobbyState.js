@@ -17,6 +17,7 @@ export function deriveLobbyState(gameData, playerName, uid) {
     imposterCount: gameData?.imposterCount || 1,
     tasksPerCrewmate: gameData?.tasksPerCrewmate || 3,
     killCooldown: gameData?.killCooldown || 30,
+    lockdownEnabled: !!gameData?.lockdownEnabled,
     imposterHistory: gameData?.imposterHistory || {},
     imposterOptions: Array.from(
       { length: Math.max(1, Math.floor(players.length / 3)) },

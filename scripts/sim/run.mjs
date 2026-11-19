@@ -2,8 +2,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { Phone, pause, readGame, readSeat, serve, until } from './phones.mjs';
 import {
-  NAMES as ALL_NAMES, callMeeting, createGame, doTasks, join, screenProblem, seats,
-  setUpLobby, startRound, vote, waitForRoundScreen
+  NAMES as ALL_NAMES, callMeeting, createGame, doTasks, enableLockdown, enterLockdownCode, join,
+  screenProblem, seats, setUpLobby, solveLockdownPuzzle, startLockdown, startRound, vote, waitForRoundScreen
 } from './game.mjs';
 
 const VOTE_MS = Number(process.env.SIM_VOTE_MS || 20000);
@@ -48,7 +48,7 @@ async function recovers(phone, code, label) {
 }
 
 // A fresh game of six with one traitor, everyone on the round screen.
-async function freshRound(browser, { tasksEach = 2, traitors = 1 } = {}) {
+async function freshRound(browser, { tasksEach = 2, traitors = 1, lockdown = false, names: NAMES = ALL_NAMES.slice(0, 6) } = {}) {
   const phones = await Promise.all(NAMES.map((name) => new Phone(browser, name).open()));
   const [host, ...others] = phones;
   const code = await createGame(host);
@@ -58,6 +58,7 @@ async function freshRound(browser, { tasksEach = 2, traitors = 1 } = {}) {
     await host.page.locator('.imposter-select select').selectOption(String(traitors));
     await until(async () => (await readGame(code)).imposterCount === traitors, { what: 'traitor count' });
   }
+  if (lockdown) await enableLockdown(host, code);
   await startRound(host, code);
   const dealt = await seats(code, NAMES);
   const traitor = NAMES.find((name) => dealt[name].role === 'Imposter');
@@ -190,6 +191,105 @@ const scenarios = {
     await vote(sleeper, 'skip')
       .then(() => record('it can still vote', true))
       .catch(() => record('it can still vote', false));
+    return game.phones;
+  },
+
+  async 'lockdown lifted by passing codes between screens'(browser) {
+    const game = await freshRound(browser, { lockdown: true, names: ALL_NAMES });
+    await settled(game.phones, game.code, { timeout: 15000, label: 'everyone sees their role' });
+    await startLockdown(game.byName[game.traitor], game.code);
+    const { lockdown } = await readGame(game.code);
+    const missing = [];
+    await Promise.all(game.phones.map((phone) => until(async () => (await phone.page.locator('.lockdown').count()) > 0, { timeout: 6000, what: phone.name })
+      .catch(async () => missing.push(`${phone.name}: ${(await phone.text()).slice(0, 120).replace(/\s+/g, ' ')}`))));
+    record('every phone shows the lockdown', missing.length === 0, missing.join(' | '));
+    record('nobody can call a meeting during it',
+      (await game.byName[game.taskers[0]].button('🚨 Emergency Meeting').count()) === 0);
+
+    const taskerPairs = lockdown.pairs.filter((pair) => game.taskers.includes(pair.giver)
+      && pair.receivers.some((name) => game.taskers.includes(name)));
+    record('taskers have enough pairs to lift it alone', taskerPairs.length >= lockdown.needed,
+      `${taskerPairs.length} tasker pairs, ${lockdown.needed} needed`);
+
+    const passCode = async (pair, { lockFirst = false } = {}) => {
+      const giver = game.byName[pair.giver];
+      const receiver = game.byName[pair.receivers.find((name) => game.taskers.includes(name))];
+      if (lockFirst) {
+        await receiver.sleep();
+        await pause(8000);
+        await receiver.wake();
+      }
+      await solveLockdownPuzzle(giver);
+      const shown = (await giver.page.locator('.lockdown-code').innerText()).trim();
+      await solveLockdownPuzzle(receiver);
+      return { receiver, shown };
+    };
+
+    const first = await passCode(taskerPairs[0]);
+    await enterLockdownCode(first.receiver, 'ZZZ-ZZZ');
+    await first.receiver.page.getByText("That's not the code.").waitFor({ timeout: 8000 })
+      .then(() => record('a wrong code is turned away', true))
+      .catch(() => record('a wrong code is turned away', false));
+    await enterLockdownCode(first.receiver, first.shown.toLowerCase());
+    await first.receiver.page.getByText('Your code is in').waitFor({ timeout: 8000 })
+      .then(() => record('the code read off the giver\'s screen is accepted, typed in lower case', true))
+      .catch(() => record('the code read off the giver\'s screen is accepted, typed in lower case', false));
+
+    for (const pair of taskerPairs.slice(1, lockdown.needed)) {
+      const next = await passCode(pair, { lockFirst: true });
+      await enterLockdownCode(next.receiver, next.shown);
+    }
+
+    await until(async () => !(await readGame(game.code)).lockdown, { timeout: 8000, what: 'lifted' })
+      .then(({ ms }) => record('enough codes lift it', true, `${ms}ms`))
+      .catch(() => record('enough codes lift it', false));
+    const after = await readGame(game.code);
+    record('the round carries on, with the lockdown cooling down', !after.gameEnded && !!after.lockdownCooldown);
+    await Promise.all(game.phones.map((phone) => until(async () => /Lockdown lifted/.test(await phone.text()), { timeout: 6000, what: phone.name })))
+      .then(() => record('every phone says it was lifted', true))
+      .catch(() => record('every phone says it was lifted', false));
+    await settled(game.phones, game.code, { timeout: 8000, label: 'everyone back on the round' });
+    return game.phones;
+  },
+
+  async 'lockdown runs out while a phone is locked'(browser) {
+    const game = await freshRound(browser, { lockdown: true });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const sleeper = game.byName[game.taskers[1]];
+    await sleeper.sleep();
+    await startLockdown(game.byName[game.traitor], game.code);
+    const { lockdown } = await readGame(game.code);
+    await until(async () => (await readGame(game.code)).gameEnded, { timeout: lockdown.until - Date.now() + 12000, what: 'traitors win' })
+      .then(({ value }) => record('the traitors win when time runs out', true, `${Math.round((Date.now() - lockdown.until) / 100) / 10}s after the deadline`))
+      .catch(() => record('the traitors win when time runs out', false));
+    const ended = await readGame(game.code);
+    record('it is put down to the lockdown', ended.winner === 'Imposters' && ended.winReason === 'lockdown', `${ended.winner} / ${ended.winReason}`);
+    await sleeper.wake();
+    await recovers(sleeper, game.code, `${sleeper.name} wakes onto game over`);
+    await settled(game.phones, game.code, { timeout: 8000, label: 'everyone reaches game over' });
+    record('game over says why', /lockdown was never lifted/.test(await game.host.text()));
+    return game.phones;
+  },
+
+  async 'a kill during lockdown changes nobody else\'s screen'(browser) {
+    const game = await freshRound(browser, { lockdown: true, names: ALL_NAMES });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    await startLockdown(game.byName[game.traitor], game.code);
+    const { lockdown } = await readGame(game.code);
+    const pair = lockdown.pairs.find((p) => game.taskers.includes(p.giver) && p.receivers.every((n) => game.taskers.includes(n)));
+    const receiver = game.byName[pair.receivers[0]];
+    await solveLockdownPuzzle(receiver);
+    const watcher = game.phones.find((phone) => phone.name !== pair.giver && !pair.receivers.includes(phone.name));
+    const before = await receiver.page.locator('.lockdown-entry').innerText();
+    const countBefore = (await watcher.page.locator('.lockdown-count').innerText()).trim();
+
+    await game.byName[game.traitor].page.locator('.kill-list').getByRole('button', { name: pair.giver, exact: true }).click();
+    await until(async () => ((await readGame(game.code)).killList || []).includes(pair.giver), { what: 'kill' });
+    await pause(3000);
+    const afterText = await receiver.page.locator('.lockdown-entry').innerText().catch(() => '(gone)');
+    record('the partner of the one killed still sees the same thing', afterText === before, afterText.slice(0, 60));
+    const countAfter = (await watcher.page.locator('.lockdown-count').innerText().catch(() => '')).trim();
+    record('the pair counts as done', countAfter !== countBefore || !(await readGame(game.code)).lockdown, `${countBefore} → ${countAfter || 'lifted'}`);
     return game.phones;
   },
 

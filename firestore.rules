@@ -37,7 +37,7 @@ service cloud.firestore {
         'roles', 'assignedTasks', 'imposterHistory',
         'imposterCount', 'tasksPerCrewmate', 'killCooldown',
         'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid', 'roundStartedAt',
-        'dealtSeats'
+        'dealtSeats', 'lockdownEnabled'
       ];
     }
 

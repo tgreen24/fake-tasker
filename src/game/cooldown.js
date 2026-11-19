@@ -56,3 +56,7 @@ export function resumeCooldowns(map = {}, now = Date.now()) {
   });
   return resumed;
 }
+
+// The same, for a cooldown shared by a whole side rather than kept per player.
+export const pauseCooldown = (entry, now = Date.now()) => pauseCooldowns({ shared: entry }, now).shared || null;
+export const resumeCooldown = (entry, now = Date.now()) => resumeCooldowns({ shared: entry }, now).shared || null;
