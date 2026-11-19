@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { Phone, pause } from './phones.mjs';
+import { makeSolvers } from './solvers.mjs';
+
+const solvers = makeSolvers();
 
 // Fills a real game with players so one person on a real phone can test it.
 //
@@ -107,8 +110,17 @@ async function turn(phone, state) {
   if (/You are a Tasker/.test(text) && Math.random() < 0.1) {
     const todo = await unpressed(phone, '.task-list');
     if (todo.length) {
-      await phone.page.getByRole('button', { name: pick(todo), exact: true }).click();
-      say(`${phone.name} did a task`);
+      const label = pick(todo);
+      await phone.page.getByRole('button', { name: label, exact: true }).click();
+      if (label.endsWith(', tap to play')) {
+        await phone.button('Start').click({ timeout: 5000 });
+        const name = (await phone.page.locator('.minigame-overlay-card h2').innerText()).trim();
+        await solvers[name](phone);
+        await phone.page.locator('.minigame-overlay').waitFor({ state: 'detached', timeout: 15000 });
+        say(`${phone.name} won ${name}`);
+      } else {
+        say(`${phone.name} did a task`);
+      }
     }
   }
 

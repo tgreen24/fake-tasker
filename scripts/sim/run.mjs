@@ -2,9 +2,13 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { Phone, pause, readGame, readSeat, serve, until } from './phones.mjs';
 import {
-  NAMES as ALL_NAMES, callMeeting, createGame, doTasks, enableLockdown, enterLockdownCode, join,
-  screenProblem, seats, setUpLobby, solveLockdownPuzzle, startLockdown, startRound, vote, waitForRoundScreen
+  NAMES as ALL_NAMES, callMeeting, createGame, doTasks, enableLockdown, enterLockdownCode, join, minigameOf,
+  openMinigameTask, playMinigameTask, screenProblem, seats, setTaskStyle, setUpLobby, solveLockdownPuzzle,
+  startLockdown, startRound, taskRow, vote, waitForRoundScreen
 } from './game.mjs';
+import { makeSolvers } from './solvers.mjs';
+
+const solvers = makeSolvers();
 
 const VOTE_MS = Number(process.env.SIM_VOTE_MS || 20000);
 const RECOVER_MS = 6000;
@@ -48,7 +52,9 @@ async function recovers(phone, code, label) {
 }
 
 // A fresh game of six with one traitor, everyone on the round screen.
-async function freshRound(browser, { tasksEach = 2, traitors = 1, lockdown = false, names: NAMES = ALL_NAMES.slice(0, 6) } = {}) {
+async function freshRound(browser, {
+  tasksEach = 2, traitors = 1, lockdown = false, taskStyle = null, names: NAMES = ALL_NAMES.slice(0, 6)
+} = {}) {
   const phones = await Promise.all(NAMES.map((name) => new Phone(browser, name).open()));
   const [host, ...others] = phones;
   const code = await createGame(host);
@@ -59,6 +65,7 @@ async function freshRound(browser, { tasksEach = 2, traitors = 1, lockdown = fal
     await until(async () => (await readGame(code)).imposterCount === traitors, { what: 'traitor count' });
   }
   if (lockdown) await enableLockdown(host, code);
+  if (taskStyle) await setTaskStyle(host, code, taskStyle);
   await startRound(host, code);
   const dealt = await seats(code, NAMES);
   const traitor = NAMES.find((name) => dealt[name].role === 'Imposter');
@@ -301,6 +308,93 @@ const scenarios = {
     record('the partner of the one killed still sees the same thing', afterText === before, afterText.slice(0, 60));
     const countAfter = (await watcher.page.locator('.lockdown-count').innerText().catch(() => '')).trim();
     record('the pair counts as done', countAfter !== countBefore || !(await readGame(game.code)).lockdown, `${countBefore} → ${countAfter || 'lifted'}`);
+    return game.phones;
+  },
+
+  async 'a round won on minigame tasks alone'(browser) {
+    const game = await freshRound(browser, { taskStyle: 'minigames' });
+    await settled(game.phones, game.code, { timeout: 15000, label: 'everyone sees their role' });
+    const first = game.taskers[0];
+    const hand = game.dealt[first].tasks;
+    record('every tasker was dealt only minigames', game.taskers.every((name) => game.dealt[name].tasks.every(minigameOf)));
+    await playMinigameTask(game.byName[first], hand[0], solvers);
+    const afterOne = (await readGame(game.code)).tasksCompleted;
+    record('winning a minigame counts the task', afterOne === 1, `total ${afterOne}`);
+    await taskRow(game.byName[first], hand[0]).click();
+    await pause(1500);
+    record('a won minigame cannot be unticked', (await readGame(game.code)).tasksCompleted === 1);
+    for (const name of game.taskers) {
+      for (const task of game.dealt[name].tasks) {
+        if (name === first && task === hand[0]) continue;
+        await playMinigameTask(game.byName[name], task, solvers);
+      }
+    }
+    await until(async () => (await readGame(game.code)).gameEnded, { what: 'game over', timeout: 15000 })
+      .then(async () => record('the round ends on the last minigame', (await readGame(game.code)).winReason === 'tasks'))
+      .catch(() => record('the round ends on the last minigame', false));
+    await settled(game.phones, game.code, { timeout: 8000, label: 'everyone reaches game over' });
+    return game.phones;
+  },
+
+  async 'a traitor\'s cover list never counts'(browser) {
+    const game = await freshRound(browser, { taskStyle: 'mixed', tasksEach: 2 });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const traitor = game.byName[game.traitor];
+    const cover = game.dealt[game.traitor].fakeTasks;
+    record('the traitor was dealt a mixed cover list', cover.length === 2 && cover.filter(minigameOf).length === 1,
+      cover.join(' | '));
+    record('the traitor starts on the targets screen', (await traitor.page.getByText('Targets').count()) > 0);
+    await traitor.button('Switch').click();
+    record('Switch shows a task list instead', (await traitor.page.getByText('Your Tasks').count()) > 0
+      && (await traitor.page.locator('.kill-list').count()) === 0);
+    const chore = cover.find((task) => !minigameOf(task));
+    await taskRow(traitor, chore).click();
+    await playMinigameTask(traitor, cover.find(minigameOf), solvers);
+    await pause(1500);
+    const { tasksCompleted } = await readGame(game.code);
+    const seat = await readSeat(game.code, game.traitor);
+    record('the cover tasks are saved as done', (seat.fakeCompleted || []).length === 2, (seat.fakeCompleted || []).join(' | '));
+    record('and the progress bar never moved', tasksCompleted === 0, `total ${tasksCompleted}`);
+    await traitor.reload();
+    await traitor.button('Switch').click({ timeout: 15000 });
+    record('they are still done after a reload', (await traitor.page.locator('.task-item.selected').count()) === 2);
+    await traitor.button('Switch').click();
+    record('Switch goes back to the targets', (await traitor.page.locator('.kill-list').count()) === 1);
+    return game.phones;
+  },
+
+  async 'a minigame closes and starts over when interrupted'(browser) {
+    const game = await freshRound(browser, { taskStyle: 'minigames', lockdown: true });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const phone = game.byName[game.taskers[0]];
+    const [task] = game.dealt[phone.name].tasks;
+    const overlay = phone.page.locator('.minigame-overlay');
+
+    await openMinigameTask(phone, task);
+    await phone.sleep();
+    await pause(3000);
+    await phone.wake();
+    await overlay.waitFor({ state: 'detached', timeout: 5000 })
+      .then(() => record('locking the phone closes the minigame', true))
+      .catch(() => record('locking the phone closes the minigame', false));
+    await taskRow(phone, task).click();
+    record('opening it again starts fresh', (await phone.button('Start').count()) === 1);
+    await phone.button('Start').click();
+
+    await callMeeting(game.byName[game.taskers[1]], game.code);
+    await overlay.waitFor({ state: 'detached', timeout: 8000 })
+      .then(() => record('a meeting closes the minigame', true))
+      .catch(() => record('a meeting closes the minigame', false));
+    for (const other of game.phones) await vote(other, 'skip').catch(() => {});
+    await until(async () => !(await readGame(game.code)).meetingCalled, { what: 'meeting over', timeout: VOTE_MS + 10000 });
+    await waitForRoundScreen(phone).catch(() => {});
+    await pause(6500);
+
+    await openMinigameTask(phone, task);
+    await startLockdown(game.byName[game.traitor], game.code);
+    await overlay.waitFor({ state: 'detached', timeout: 6000 })
+      .then(() => record('a lockdown closes the minigame', true))
+      .catch(() => record('a lockdown closes the minigame', false));
     return game.phones;
   },
 

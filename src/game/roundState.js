@@ -47,6 +47,8 @@ export function deriveRoundState(gameData, playerName, uid, privateData) {
     fellowImposters: playersWithRole(roleMap, IMPOSTER).filter((player) => player !== playerName),
     tasks: privateData?.tasks || [],
     completedTasks: privateData?.completedTasks || [],
+    fakeTasks: privateData?.fakeTasks || [],
+    fakeCompleted: privateData?.fakeCompleted || [],
     tasksBlocked: !!sabotagingImposter,
     sabotagingImposter: sabotagingImposter || '',
     sabotageActive: !!mySabotage,

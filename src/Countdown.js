@@ -13,6 +13,8 @@ import SeatRequests from './components/SeatRequests';
 import ClaimSeat from './components/ClaimSeat';
 import LockdownPanel from './components/lockdown/LockdownPanel';
 import LockdownTrigger from './components/lockdown/LockdownTrigger';
+import TaskList from './components/TaskList';
+import MinigameTaskOverlay from './components/minigames/MinigameTaskOverlay';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -28,8 +30,10 @@ function Countdown() {
     crewmates, killList, fellowImposters, killCooldownLeft,
     sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates,
     sabotageCooldownLeft, sabotageCooldownTotal, killCooldown,
-    blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal, seatLost
+    blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal, seatLost,
+    fakeTasks, fakeCompleted, playing, showingCover
   } = state;
+  const traitorAlive = role === 'Imposter' && !isDead;
 
   return (
     <div className="countdown-screen">
@@ -119,22 +123,29 @@ function Countdown() {
             {role === 'Crewmate' && !tasksBlocked && !lockdown.state.active && (
               <div>
                 <h3>Your Tasks</h3>
-                <div className="task-list">
-                  <ul>
-                    {tasks.map((task) => (
-                      <Selectable
-                        key={task}
-                        className={`task-item ${completedTasks.includes(task) ? 'selected' : ''}`}
-                        selected={completedTasks.includes(task)}
-                        label={`${task}${completedTasks.includes(task) ? ', done' : ''}`}
-                        onSelect={() => actions.toggleTask(task)}
-                      >
-                        <span>{task}</span>
-                      </Selectable>
-                    ))}
-                  </ul>
-                </div>
+                <TaskList
+                  tasks={tasks}
+                  completed={completedTasks}
+                  onToggle={actions.toggleTask}
+                  onPlay={(task) => actions.playTask(task)}
+                />
               </div>
+            )}
+
+            {traitorAlive && showingCover && (
+              lockdown.state.active ? (
+                <p className="tasks-locked">Your tasks are locked until the lockdown is lifted.</p>
+              ) : (
+                <div>
+                  <h3>Your Tasks</h3>
+                  <TaskList
+                    tasks={fakeTasks}
+                    completed={fakeCompleted}
+                    onToggle={actions.toggleCoverTask}
+                    onPlay={(task) => actions.playTask(task, { asCover: true })}
+                  />
+                </div>
+              )
             )}
 
             {role === 'Crewmate' && tasksBlocked && (
@@ -144,7 +155,7 @@ function Countdown() {
               </div>
             )}
 
-            {role === 'Imposter' && !isDead && (
+            {traitorAlive && !showingCover && (
               <div>
                 <h3>Targets</h3>
                 <div className="kill-list">
@@ -247,7 +258,10 @@ function Countdown() {
               )}
             </div>
 
-            {lockdown.state.canStart && <LockdownTrigger onStart={lockdown.actions.start} />}
+            {lockdown.state.canStart && !showingCover && <LockdownTrigger onStart={lockdown.actions.start} />}
+            {traitorAlive && (
+              <button type="button" className="leave-game cover-switch" onClick={actions.switchView}>Switch</button>
+            )}
 
             <LeaveGame
               gameCode={gameCode}
@@ -256,6 +270,15 @@ function Countdown() {
               role={role}
               tasksOutstanding={Math.max(0, tasks.length - completedTasks.length)}
             />
+
+            {playing && (
+              <MinigameTaskOverlay
+                key={playing.task}
+                task={playing.task}
+                onSolved={actions.solvePlaying}
+                onClose={actions.stopPlaying}
+              />
+            )}
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   callMeeting, clearSabotage, endRound, publishFinishTime,
   recordKill, startSabotage, toggleTaskCompletion, undoKill
@@ -13,6 +13,8 @@ import { useGameSync } from './useGameSync';
 import { usePrivateRole } from './usePrivateRole';
 import { usePublishOutRoles } from './usePublishOutRoles';
 import { useLockdown } from './useLockdown';
+import { useFakeTasks } from './useFakeTasks';
+import { isMinigameTask } from '../game/minigameTasks';
 import { withTimeout } from '../withTimeout';
 
 const TASK_WAIT_MS = 10000;
@@ -63,6 +65,20 @@ export function useCountdown(gameCode) {
   }, [roundStartedAt]);
 
   const completedTasks = ownTasks || round.completedTasks;
+  const cover = useFakeTasks(gameCode, playerName, round.fakeTasks, round.fakeCompleted, roundStartedAt);
+
+  // The minigame open on screen, if any, and whether it is real or cover.
+  // Anything that stops tasks closes it: the next try starts fresh.
+  const [playing, setPlaying] = useState(null);
+  const [showingCover, setShowingCover] = useState(false);
+  const tasksStopped = round.tasksBlocked || lockdown.state.active;
+  useEffect(() => {
+    if (tasksStopped) setPlaying(null);
+  }, [tasksStopped]);
+  useEffect(() => {
+    setPlaying(null);
+    setShowingCover(false);
+  }, [roundStartedAt]);
 
   // A role that lands after the vote's result screen has gone would otherwise
   // never be announced to the room, so the round screen says it instead.
@@ -120,8 +136,11 @@ export function useCountdown(gameCode) {
   }, [round.returningFromMeeting, showIntro]);
 
   const actions = useMemo(() => ({
+    // Resolves true once the change has landed, false if it did not.
     toggleTask: async (task) => {
-      if (round.tasksBlocked || lockdown.state.active || inFlight.current.has(task)) return;
+      if (round.tasksBlocked || lockdown.state.active || inFlight.current.has(task)) return false;
+      // A minigame proved it was done; it is not untickable like a chore.
+      if (isMinigameTask(task) && completedTasks.includes(task)) return true;
       inFlight.current.add(task);
 
       // Tick it now. A transaction has to reach the server before it can say
@@ -145,11 +164,11 @@ export function useCountdown(gameCode) {
       // old list is safe to keep: go back to whatever the server says.
       if (timedOut) {
         setOwnTasks(null);
-        return;
+        return false;
       }
       if (!nextCompleted) {
         setOwnTasks(previous);
-        return;
+        return false;
       }
 
       setOwnTasks(nextCompleted);
@@ -158,6 +177,7 @@ export function useCountdown(gameCode) {
       if (justFinished && !gameData?.finishedAt?.[playerName]) {
         await publishFinishTime(gameCode, playerName);
       }
+      return true;
     },
 
     toggleKill: async (crewmate) => {
@@ -183,16 +203,38 @@ export function useCountdown(gameCode) {
       await startSabotage(gameCode, playerName, crewmate);
     },
 
-    clearMySabotage: () => clearSabotage(gameCode, playerName)
+    clearMySabotage: () => clearSabotage(gameCode, playerName),
+
+    playTask: (task, { asCover = false } = {}) => {
+      if (!tasksStopped) setPlaying({ task, asCover });
+    },
+    stopPlaying: () => setPlaying(null),
+    toggleCoverTask: (task) => {
+      if (!lockdown.state.active) cover.toggleFake(task);
+    },
+    switchView: () => {
+      setPlaying(null);
+      setShowingCover((now) => !now);
+    }
   }), [
+    cover, tasksStopped,
     lockdown.state.active,
     gameCode, playerName, round, completedTasks,
     killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt
   ]);
 
+  // A won minigame, counted as a real task or as cover depending on which
+  // list it was opened from. Resolves whether the win was saved.
+  const solvePlaying = useCallback(async () => {
+    if (!playing) return false;
+    if (playing.asCover) return cover.completeFake(playing.task);
+    return actions.toggleTask(playing.task);
+  }, [playing, cover, actions]);
+
   return {
     state: {
       ...round, completedTasks, playerName,
+      fakeTasks: cover.fakeTasks, fakeCompleted: cover.fakeCompleted, playing, showingCover,
       seatLost: !!gameData?.playerUids?.[playerName] && gameData.playerUids[playerName] !== currentUid(),
       seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
       showIntro,
@@ -205,7 +247,7 @@ export function useCountdown(gameCode) {
       lateReveal,
       awaitingOthers: round.awaitingReveal.filter((name) => name !== playerName)
     },
-    actions,
+    actions: { ...actions, solvePlaying },
     lockdown,
     loading: loading || roleLoading,
     connected

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium, webkit } from 'playwright';
 import { Phone, pause, readGame, serve, until } from './phones.mjs';
-import { NAMES, createGame, enableLockdown, join, screenProblem, setUpLobby, startRound } from './game.mjs';
+import { NAMES, createGame, enableLockdown, join, screenProblem, setTaskStyle, setUpLobby, startRound } from './game.mjs';
 import { playLikeAPerson } from './players.mjs';
 
 // Whole games played by eight phones while their owners keep locking them,
@@ -156,6 +156,7 @@ await setUpLobby(host, code, { tasksEach: 3 });
 await host.page.locator('.imposter-select select').selectOption('2');
 await until(async () => (await readGame(code)).imposterCount === 2, { what: 'two traitors' });
 if (process.env.CHAOS_LOCKDOWN !== '0') await enableLockdown(host, code);
+await setTaskStyle(host, code, process.env.CHAOS_TASKS || 'mixed');
 console.log(`chaos on ${process.env.SIM_ENGINE || 'chromium'}: game ${code}, ${phones.length} phones, ${ROUNDS} rounds`);
 
 const outcomes = [];

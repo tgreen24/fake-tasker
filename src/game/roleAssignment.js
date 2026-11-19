@@ -1,4 +1,5 @@
 import { LONG, SHORT, lengthFor, roomFor } from './taskPacks';
+import { dealMinigameTasks, splitFor } from './minigameTasks';
 
 const IMPOSTER = 'Imposter';
 const CREWMATE = 'Crewmate';
@@ -98,7 +99,22 @@ export function assignTasksEvenly(crewmates, tasks, tasksPerCrewmate) {
   return assignedTasks;
 }
 
-export function buildRound({ players, tasks, imposterCount, tasksPerCrewmate, imposterHistory = {} }) {
+// Each hand is the round's split of physical tasks and minigames, mixed
+// together. Traitors are dealt a hand the same way, which counts for nothing
+// but gives them something real to be seen doing.
+function dealHands(names, { tasks, perPlayer, split, rooms }) {
+  const physical = assignTasksEvenly(names, tasks, split.physical);
+  const minigames = dealMinigameTasks(names, split.minigames, rooms);
+  const hands = {};
+  names.forEach((name) => {
+    hands[name] = shuffleArray([...physical[name], ...minigames[name]]).slice(0, perPlayer);
+  });
+  return hands;
+}
+
+export function buildRound({
+  players, tasks, imposterCount, tasksPerCrewmate, imposterHistory = {}, taskStyle, minigameRooms = []
+}) {
   const weights = calculateWeights(players, imposterHistory);
   const imposters = selectImposters(players, weights, imposterCount);
   const crewmates = players.filter((player) => !imposters.includes(player));
@@ -118,9 +134,13 @@ export function buildRound({ players, tasks, imposterCount, tasksPerCrewmate, im
     completedTasks[player] = [];
   });
 
+  const split = splitFor(taskStyle, tasksPerCrewmate);
+  const dealing = { tasks, perPlayer: tasksPerCrewmate, split, rooms: minigameRooms };
+
   return {
     roles,
-    assignedTasks: assignTasksEvenly(crewmates, tasks, tasksPerCrewmate),
+    assignedTasks: dealHands(crewmates, dealing),
+    fakeTasks: dealHands(imposters, dealing),
     imposterHistory: nextHistory,
     completedTasks
   };

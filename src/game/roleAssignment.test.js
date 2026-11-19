@@ -3,6 +3,7 @@ import {
   buildRound, calculateWeights, selectImposters, assignTasksEvenly
 } from './roleAssignment';
 import { MIN_PLAYERS, deriveLobbyState, validateNewTask, validateStart } from './lobbyState';
+import { isMinigameTask, parseMinigameTask } from './minigameTasks';
 
 const PLAYERS = ['tyler', 'sam', 'kai', 'rae'];
 const TASKS = ['Dishes', 'Sweep', 'Fold', 'Water', 'Sort'];
@@ -136,8 +137,60 @@ describe('buildRound', () => {
   });
 });
 
+describe('dealing by task style', () => {
+  const rooms = ['Kitchen', 'Garage', 'Bedroom 1'];
+  const deal = (taskStyle, tasksPerCrewmate = 4) => buildRound({
+    players: PLAYERS, tasks: TASKS, imposterCount: 1, tasksPerCrewmate, taskStyle, minigameRooms: rooms
+  });
+  const minigamesIn = (hand) => hand.filter(isMinigameTask).length;
+
+  test('a physical game deals no minigames, as before', () => {
+    const { assignedTasks } = deal('physical', 3);
+    Object.values(assignedTasks).forEach((hand) => expect(minigamesIn(hand)).toBe(0));
+  });
+
+  test('a minigames game deals only minigames, in the rooms given', () => {
+    const { assignedTasks } = deal('minigames');
+    Object.values(assignedTasks).forEach((hand) => {
+      expect(hand).toHaveLength(4);
+      hand.forEach((task) => expect(rooms).toContain(parseMinigameTask(task).room));
+    });
+  });
+
+  test('a mixed game gives everyone the same even split', () => {
+    const { assignedTasks } = deal('mixed');
+    Object.values(assignedTasks).forEach((hand) => {
+      expect(hand).toHaveLength(4);
+      expect(minigamesIn(hand)).toBe(2);
+    });
+  });
+
+  test('traitors are dealt a fake hand just like a tasker\'s, and no real one', () => {
+    ['physical', 'minigames', 'mixed'].forEach((style) => {
+      const { roles, assignedTasks, fakeTasks } = deal(style);
+      const traitor = Object.keys(roles).find((p) => roles[p] === 'Imposter');
+      const tasker = Object.keys(roles).find((p) => roles[p] !== 'Imposter');
+      expect(assignedTasks[traitor]).toBeUndefined();
+      expect(fakeTasks[traitor]).toHaveLength(4);
+      expect(minigamesIn(fakeTasks[traitor])).toBe(minigamesIn(assignedTasks[tasker]));
+      expect(fakeTasks[tasker]).toBeUndefined();
+    });
+  });
+});
+
 describe('validateStart', () => {
   const ok = { players: PLAYERS, tasks: TASKS, imposterCount: 1, tasksPerCrewmate: 2 };
+
+  test('a minigames game needs rooms but no physical tasks', () => {
+    expect(validateStart({ ...ok, tasks: [], tasksPerCrewmate: 6, taskStyle: 'minigames', minigameRooms: ['Kitchen'] })).toBeNull();
+    expect(validateStart({ ...ok, taskStyle: 'minigames', minigameRooms: [] })).toMatch(/room/);
+  });
+
+  test('a mixed game needs physical tasks for its half', () => {
+    const mixed = { ...ok, taskStyle: 'mixed', minigameRooms: ['Kitchen'], tasksPerCrewmate: 6 };
+    expect(validateStart({ ...mixed, tasks: TASKS.slice(0, 3) })).toBeNull();
+    expect(validateStart({ ...mixed, tasks: TASKS.slice(0, 2) })).toMatch(/at least 3/);
+  });
 
   test('accepts a valid setup', () => expect(validateStart(ok)).toBeNull());
 

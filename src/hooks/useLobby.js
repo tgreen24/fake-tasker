@@ -2,10 +2,12 @@ import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   addTask as writeTask, deleteGame, kickPlayer as writeKick, removeTask as writeRemoveTask,
-  setTasks as writeTaskList, startRound, updateSetting as writeSetting
+  setMinigameRooms, setTaskStyle as writeTaskStyle, setTasks as writeTaskList, startRound,
+  updateSetting as writeSetting
 } from '../game/mutations';
-import { deriveLobbyState, validateNewTask, validateStart } from '../game/lobbyState';
-import { activePackId, withPackSelected } from '../game/taskPacks';
+import { roomsWithAdded, roomsWithout, startingRooms } from '../game/minigameTasks';
+import { deriveLobbyState, tasksEachWithin, validateNewTask, validateStart } from '../game/lobbyState';
+import { activePackId, packById, roomsIn, withPackSelected } from '../game/taskPacks';
 import { buildRound } from '../game/roleAssignment';
 import { currentUid } from '../firebase';
 import { withTimeout, isTimeout } from '../withTimeout';
@@ -87,7 +89,9 @@ export function useLobby(gameCode) {
     addTask,
     startGame,
     finishGame,
-    removeTask: (task) => writeRemoveTask(gameCode, task).catch((error) => {
+    removeTask: (task) => writeRemoveTask(
+      gameCode, task, tasksEachWithin(lobby.tasksPerCrewmate, lobby.taskStyle, lobby.tasks.length - 1)
+    ).catch((error) => {
       console.error('Error removing task:', error);
     }),
     addOneTask: (task) => writeTask(gameCode, task).catch((error) => {
@@ -95,7 +99,8 @@ export function useLobby(gameCode) {
     }),
     selectPack: (packId) => {
       const next = withPackSelected(lobby.tasks, packId);
-      return writeTaskList(gameCode, next).catch((error) => {
+      const clamped = tasksEachWithin(lobby.tasksPerCrewmate, lobby.taskStyle, next.length);
+      return writeTaskList(gameCode, next, clamped).catch((error) => {
         console.error('Error choosing a task pack:', error);
       });
     },
@@ -103,8 +108,24 @@ export function useLobby(gameCode) {
       if (playerToKick === playerName) return undefined;
       return writeKick(gameCode, playerToKick);
     },
-    updateSetting: (field, value) => writeSetting(gameCode, field, value)
-  }), [gameCode, playerName, addTask, startGame, finishGame, lobby.tasks]);
+    updateSetting: (field, value) => writeSetting(gameCode, field, value),
+    // Turning minigames on with no rooms yet fills them in from the pack, so
+    // the host has something to edit rather than a blank list.
+    setTaskStyle: (style) => {
+      const needsRooms = style !== 'physical' && !lobby.minigameRooms.length;
+      const rooms = needsRooms ? startingRooms(roomsIn(packById(activePackId(lobby.tasks)))) : null;
+      const clamped = tasksEachWithin(lobby.tasksPerCrewmate, style, lobby.tasks.length);
+      return writeTaskStyle(gameCode, style, rooms, clamped)
+        .catch((error) => console.error('Error setting task style:', error));
+    },
+    addRoom: (name) => {
+      const next = roomsWithAdded(lobby.minigameRooms, name);
+      if (next === lobby.minigameRooms) return undefined;
+      return setMinigameRooms(gameCode, next).catch((error) => console.error('Error adding a room:', error));
+    },
+    removeRoom: (name) => setMinigameRooms(gameCode, roomsWithout(lobby.minigameRooms, name))
+      .catch((error) => console.error('Error removing a room:', error))
+  }), [gameCode, playerName, addTask, startGame, finishGame, lobby]);
 
   return {
     state: {

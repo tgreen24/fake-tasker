@@ -312,6 +312,18 @@ await check('a player cannot turn Lockdown on for the game',
 await check('the host can turn Lockdown on',
   assertSucceeds(updateDoc(doc(host, 'games', CODE), { lockdownEnabled: true })));
 
+await check('a player cannot change the task style',
+  assertFails(updateDoc(doc(player, 'games', CODE), { taskStyle: 'minigames' })));
+
+await check('the host can set the task style and rooms',
+  assertSucceeds(updateDoc(doc(host, 'games', CODE), { taskStyle: 'mixed', minigameRooms: ['Kitchen', 'Garage'] })));
+
+await check('only a known task style',
+  assertFails(updateDoc(doc(host, 'games', CODE), { taskStyle: 'chaos' })));
+
+await check('no more than twenty rooms',
+  assertFails(updateDoc(doc(host, 'games', CODE), { minigameRooms: Array.from({ length: 21 }, (_, i) => `Room ${i}`) })));
+
 await testEnv.cleanup();
 
 const failed = results.filter(([, ok]) => !ok);

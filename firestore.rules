@@ -20,7 +20,9 @@ service cloud.firestore {
         && data.players.size() <= 25
         && data.creator is string
         && (!('tasks' in data.keys()) || (data.tasks is list && data.tasks.size() <= 60))
-        && (!('killList' in data.keys()) || (data.killList is list && data.killList.size() <= 25));
+        && (!('killList' in data.keys()) || (data.killList is list && data.killList.size() <= 25))
+        && (!('minigameRooms' in data.keys()) || (data.minigameRooms is list && data.minigameRooms.size() <= 20))
+        && (!('taskStyle' in data.keys()) || data.taskStyle in ['physical', 'minigames', 'mixed']);
     }
 
     // Only the account that created the game is the host. `creator` is a
@@ -37,7 +39,7 @@ service cloud.firestore {
         'roles', 'assignedTasks', 'imposterHistory',
         'imposterCount', 'tasksPerCrewmate', 'killCooldown',
         'tasks', 'gameStarted', 'expiresAt', 'creator', 'creatorUid', 'roundStartedAt',
-        'dealtSeats', 'lockdownEnabled'
+        'dealtSeats', 'lockdownEnabled', 'taskStyle', 'minigameRooms'
       ];
     }
 

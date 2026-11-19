@@ -165,14 +165,26 @@ export const addTask = (gameCode, task) =>
 // addition, and Firestore will not take both on one field in one write. Only
 // the host may write tasks at all, so there is no second writer to lose an
 // edit to.
-export const setTasks = (gameCode, tasks) =>
-  updateGame(gameCode, { tasks });
+export const setTasks = (gameCode, tasks, tasksPerCrewmate) =>
+  updateGame(gameCode, { tasks, ...(tasksPerCrewmate ? { tasksPerCrewmate } : {}) });
 
-export const removeTask = (gameCode, task) =>
-  updateDoc(gameRef(gameCode), { tasks: arrayRemove(task) });
+export const removeTask = (gameCode, task, tasksPerCrewmate) =>
+  updateDoc(gameRef(gameCode), { tasks: arrayRemove(task), ...(tasksPerCrewmate ? { tasksPerCrewmate } : {}) });
 
 export const updateSetting = (gameCode, field, value) =>
   updateGame(gameCode, { [field]: value });
+
+// Style and rooms in one write, so switching to minigames never leaves a
+// moment where they are on with nowhere to play them.
+export const setTaskStyle = (gameCode, taskStyle, minigameRooms, tasksPerCrewmate) =>
+  updateGame(gameCode, {
+    taskStyle,
+    ...(minigameRooms ? { minigameRooms } : {}),
+    ...(tasksPerCrewmate ? { tasksPerCrewmate } : {})
+  });
+
+export const setMinigameRooms = (gameCode, minigameRooms) =>
+  updateGame(gameCode, { minigameRooms });
 
 // Roles and task lists live in games/{code}/players/{name}, addressed to the
 // account that holds the seat. The shared document never carries them again.
@@ -182,7 +194,7 @@ export const updateSetting = (gameCode, field, value) =>
 // tapped again used to land twice on reconnect, reshuffling roles people had
 // already seen. It also refuses a roster that changed under the host, so
 // somebody joining mid-tap is not left in the game without a role.
-export async function startRound(gameCode, { roles, assignedTasks, imposterHistory }, playerUids = {}) {
+export async function startRound(gameCode, { roles, assignedTasks, fakeTasks, imposterHistory }, playerUids = {}) {
   try {
     return await runTransaction(db, async (tx) => {
       const snapshot = await tx.get(gameRef(gameCode));
@@ -192,7 +204,7 @@ export async function startRound(gameCode, { roles, assignedTasks, imposterHisto
       const dealt = Object.keys(roles).sort().join('\n');
       if ((data.players || []).slice().sort().join('\n') !== dealt) return 'roster-changed';
       const uids = { ...playerUids, ...(data.playerUids || {}) };
-      dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, uids);
+      dealRound(tx, gameCode, { roles, assignedTasks, fakeTasks, imposterHistory }, uids);
       return 'started';
     });
   } catch (error) {
@@ -201,7 +213,7 @@ export async function startRound(gameCode, { roles, assignedTasks, imposterHisto
   }
 }
 
-function dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, playerUids) {
+function dealRound(tx, gameCode, { roles, assignedTasks, fakeTasks = {}, imposterHistory }, playerUids) {
   Object.keys(roles).forEach((playerName) => {
     const isTraitor = roles[playerName] === 'Imposter';
     tx.set(playerRef(gameCode, playerName), {
@@ -209,7 +221,7 @@ function dealRound(tx, gameCode, { roles, assignedTasks, imposterHistory }, play
       role: roles[playerName],
       tasks: assignedTasks[playerName] || [],
       completedTasks: [],
-      ...(isTraitor ? { roleMap: roles } : {})
+      ...(isTraitor ? { roleMap: roles, fakeTasks: fakeTasks[playerName] || [], fakeCompleted: [] } : {})
     });
   });
 
@@ -384,6 +396,13 @@ export async function toggleTaskCompletion(gameCode, playerName, task) {
     return null;
   }
 }
+
+// A traitor's cover list. Kept in their own seat, which nobody else can read,
+// and never added to the shared total -- it only has to look like work.
+export const setFakeTaskDone = (gameCode, playerName, task, done) =>
+  updateDoc(playerRef(gameCode, playerName), {
+    fakeCompleted: done ? arrayUnion(task) : arrayRemove(task)
+  });
 
 export const startSabotage = (gameCode, imposter, crewmate) =>
   updateGame(gameCode, { [`sabotages.${imposter}`]: { sabotagedPlayer: crewmate } });

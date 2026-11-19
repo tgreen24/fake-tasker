@@ -1,5 +1,8 @@
 import { pause, readGame, readSeat } from './phones.mjs';
-import { enterLockdownCode, solveLockdownPuzzle, vote } from './game.mjs';
+import { enterLockdownCode, minigameOf, playMinigameTask, solveLockdownPuzzle, taskRow, vote } from './game.mjs';
+import { makeSolvers } from './solvers.mjs';
+
+const solvers = makeSolvers();
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const between = (low, high) => low + Math.random() * (high - low);
@@ -58,12 +61,27 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
       const todo = (seat.tasks || []).filter((task) => !(seat.completedTasks || []).includes(task));
       if (todo.length && Math.random() < 0.25) {
         const task = pick(todo);
-        await phone.page.getByRole('button', { name: task, exact: true }).click({ timeout: 1500 });
-        log(`${me} did a task`);
+        if (minigameOf(task)) {
+          await playMinigameTask(phone, task, solvers);
+          log(`${me} won ${minigameOf(task).name}`);
+        } else {
+          await taskRow(phone, task).click({ timeout: 1500 });
+          log(`${me} did a task`);
+        }
       }
     } else if (seat.role === 'Imposter') {
       const targets = alive.filter((name) => name !== me && (seat.roleMap || {})[name] !== 'Imposter');
       const cooling = /kill cooldown/i.test(await phone.text());
+      // Now and then a traitor flips to their cover list and does a chore.
+      const cover = (seat.fakeTasks || []).filter((task) => !minigameOf(task) && !(seat.fakeCompleted || []).includes(task));
+      if (cover.length && Math.random() < 0.05) {
+        await phone.button('Switch').click({ timeout: 1500 });
+        await taskRow(phone, pick(cover)).click({ timeout: 1500 });
+        await pause(between(1000, 3000));
+        await phone.button('Switch').click({ timeout: 1500 });
+        log(`${me} faked a task`);
+        return;
+      }
       const lockdownButton = phone.button('Lockdown');
       if (await lockdownButton.count() && Math.random() < 0.04) {
         await lockdownButton.click({ timeout: 1500 });

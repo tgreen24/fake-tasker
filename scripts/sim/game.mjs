@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { BASE, Phone, expectedPath, pause, readGame, readSeat, until } from './phones.mjs';
 
 export const NAMES = ['Ava', 'Ben', 'Cal', 'Dee', 'Eli', 'Fay', 'Gus', 'Hal'];
@@ -102,3 +103,47 @@ export async function doTasks(phone, tasks) {
   }
 }
 
+
+// ── minigame tasks ──
+
+const catalog = [...(await readFile('src/game/minigames/catalog.js', 'utf8'))
+  .matchAll(/id: '([^']+)', name: '([^']+)', icon: '([^']+)'/g)]
+  .map(([, id, name, icon]) => ({ id, name, icon }));
+
+export function minigameOf(task) {
+  const match = /^minigame:([^@]+)@(.+)$/.exec(task || '');
+  if (!match) return null;
+  const info = catalog.find((game) => game.id === match[1]);
+  return info && { ...info, room: match[2] };
+}
+
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+export async function setTaskStyle(host, code, style) {
+  await host.page.locator('#task-style').selectOption(style);
+  await until(async () => (await readGame(code)).taskStyle === style, { what: `task style ${style}` });
+}
+
+// The task's row on the round screen, whichever list it is in.
+export const taskRow = (phone, task) => {
+  const minigame = minigameOf(task);
+  return minigame
+    ? phone.page.getByRole('button', { name: new RegExp(`${escape(minigame.room)}: ${escape(minigame.name)}`) })
+    : phone.page.getByRole('button', { name: task, exact: true });
+};
+
+export async function openMinigameTask(phone, task) {
+  await taskRow(phone, task).click({ timeout: 10000 });
+  await phone.button('Start').click({ timeout: 5000 });
+}
+
+export async function playMinigameTask(phone, task, solvers) {
+  const { name } = minigameOf(task);
+  try {
+    await openMinigameTask(phone, task);
+    await solvers[name](phone);
+    await phone.page.locator('.minigame-overlay').waitFor({ state: 'detached', timeout: 10000 });
+  } catch (error) {
+    throw new Error(`${phone.name} playing ${name}: ${error.message.split('\n')[0]}`);
+  }
+}

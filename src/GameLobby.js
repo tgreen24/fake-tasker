@@ -8,6 +8,7 @@ import ScreenHeader from './components/ScreenHeader';
 import HowToPlay from './components/HowToPlay';
 import InviteButton from './components/InviteButton';
 import TaskEditor from './components/TaskEditor';
+import TaskStyleSettings from './components/TaskStyleSettings';
 import { TASK_PACKS } from './game/taskPacks';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
@@ -26,7 +27,7 @@ function GameLobby() {
 
   const {
     players, tasks, maxPlayers, playerName, isCreator,
-    imposterCount, tasksPerCrewmate, killCooldown, lockdownEnabled,
+    imposterCount, tasksPerCrewmate, killCooldown, lockdownEnabled, taskStyle, minigameRooms,
     imposterOptions, taskCountOptions, colors,
     newTask, starting, errorMessage, activePack, seatRequests, dealtSeats, seatLost
   } = state;
@@ -81,6 +82,11 @@ function GameLobby() {
 
         {lockdownEnabled && !isCreator && (
           <p className="vote-progress">🔒 Lockdown sabotage is on this game.</p>
+        )}
+        {taskStyle !== 'physical' && !isCreator && (
+          <p className="vote-progress">
+            🎮 {taskStyle === 'mixed' ? 'Tasks and minigames' : 'Minigames'} in: {minigameRooms.join(', ')}
+          </p>
         )}
 
         <HowToPlay />
@@ -137,6 +143,14 @@ function GameLobby() {
               />
             </label>
 
+            <TaskStyleSettings
+              taskStyle={taskStyle}
+              rooms={minigameRooms}
+              onStyle={actions.setTaskStyle}
+              onAddRoom={actions.addRoom}
+              onRemoveRoom={actions.removeRoom}
+            />
+
             <div className="task-count-selection">
               <label>Tasks each:</label>
               <select
@@ -149,6 +163,7 @@ function GameLobby() {
               </select>
             </div>
 
+            {taskStyle !== 'minigames' && (
             <TaskEditor
               tasks={tasks}
               packs={TASK_PACKS}
@@ -159,6 +174,7 @@ function GameLobby() {
               onRemoveTask={actions.removeTask}
               onSelectPack={actions.selectPack}
             />
+            )}
 
             <ConfirmButton
               className="end-game-btn"
