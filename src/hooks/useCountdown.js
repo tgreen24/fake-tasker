@@ -121,7 +121,7 @@ export function useCountdown(gameCode) {
 
   const actions = useMemo(() => ({
     toggleTask: async (task) => {
-      if (round.tasksBlocked || inFlight.current.has(task)) return;
+      if (round.tasksBlocked || lockdown.state.active || inFlight.current.has(task)) return;
       inFlight.current.add(task);
 
       // Tick it now. A transaction has to reach the server before it can say
@@ -185,6 +185,7 @@ export function useCountdown(gameCode) {
 
     clearMySabotage: () => clearSabotage(gameCode, playerName)
   }), [
+    lockdown.state.active,
     gameCode, playerName, round, completedTasks,
     killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt
   ]);

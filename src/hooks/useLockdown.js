@@ -24,6 +24,11 @@ export function useLockdown(gameCode, gameData, playerName, privateData) {
     ? Math.max(0, Math.min(LOCKDOWN_SECONDS, Math.ceil((progress.until - now) / 1000)))
     : 0;
   const cooldownLeft = remainingCooldownSeconds(cooldownEntry, LOCKDOWN_COOLDOWN_SECONDS, now);
+  const alive = !(gameData?.killList || []).includes(playerName);
+  // Only offered while it can actually be pressed: anything showing on a
+  // traitor's screen the rest of the time would give them away at a glance.
+  const canStart = enabled && !progress.active && cooldownLeft === 0 && alive
+    && privateData?.role === 'Imposter' && !gameData?.meetingCalled;
 
   // Every phone watches for the end, so it does not depend on the one that
   // started it, or on anybody in particular, still being awake.
@@ -74,8 +79,7 @@ export function useLockdown(gameCode, gameData, playerName, privateData) {
       secondsLeft,
       secondsTotal: LOCKDOWN_SECONDS,
       part,
-      cooldownLeft,
-      cooldownTotal: LOCKDOWN_COOLDOWN_SECONDS,
+      canStart,
       justLifted: liftedNotice
     },
     actions

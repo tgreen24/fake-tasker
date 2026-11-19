@@ -64,9 +64,10 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
     } else if (seat.role === 'Imposter') {
       const targets = alive.filter((name) => name !== me && (seat.roleMap || {})[name] !== 'Imposter');
       const cooling = /kill cooldown/i.test(await phone.text());
-      const lockdownButton = phone.button('🔒 Start Lockdown');
-      if (await lockdownButton.count() && await lockdownButton.isEnabled() && Math.random() < 0.04) {
+      const lockdownButton = phone.button('Lockdown');
+      if (await lockdownButton.count() && Math.random() < 0.04) {
         await lockdownButton.click({ timeout: 1500 });
+        await phone.button('Tap again to lock everyone down').click({ timeout: 1500 });
         log(`${me} started a lockdown`);
         return;
       }

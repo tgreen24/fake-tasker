@@ -16,6 +16,7 @@ function CodeEntry({ from, onEnter }) {
     <form className="lockdown-entry" onSubmit={submit}>
       <p>Get your code from <strong>{from}</strong> and type it in.</p>
       <input
+        type="text"
         className="lockdown-input"
         value={typed}
         onChange={(event) => {

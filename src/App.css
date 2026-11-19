@@ -1578,6 +1578,8 @@ ul { list-style: none; margin: 0; padding: 0; }
 /* ── lockdown ──────────────────────────────────────────────── */
 
 .lockdown {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 12px 0;
   padding: 14px;
   border-radius: var(--radius);
@@ -1631,6 +1633,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .lockdown-entry p { margin: 0; }
 
 .lockdown-input {
+  min-width: 0;
   font-size: 1.6rem;
   text-align: center;
   letter-spacing: .14em;
@@ -1641,12 +1644,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .lockdown-error { margin: 0; color: var(--danger); font-weight: 600; }
 .lockdown-accepted { margin: 0; color: var(--success); font-weight: 700; font-size: 1.1rem; }
 
-.lockdown-trigger {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-}
+.tasks-locked { color: var(--text-dim); }
 
 .reveal-notice.lockdown-lifted { box-shadow: inset 0 0 0 1px var(--success); color: var(--success); font-weight: 700; }
 
@@ -1676,6 +1674,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 /* ── minigames ─────────────────────────────────────────────── */
 
 .minigame {
+  overflow-x: clip;
+  padding: 0 6px;
+  margin: 0 -6px;
   display: flex;
   flex-direction: column;
   gap: 10px;

@@ -34,9 +34,10 @@ export async function enableLockdown(host, code) {
 }
 
 export async function startLockdown(traitor, code) {
-  const button = traitor.button('🔒 Start Lockdown');
-  await until(async () => (await button.count()) && (await button.isEnabled()), { what: 'lockdown ready', timeout: 20000 });
+  const button = traitor.button('Lockdown');
+  await until(async () => (await button.count()) > 0, { what: 'lockdown ready', timeout: 20000 });
   await button.click();
+  await traitor.button('Tap again to lock everyone down').click();
   await until(async () => !!(await readGame(code)).lockdown, { what: 'lockdown to start' });
 }
 

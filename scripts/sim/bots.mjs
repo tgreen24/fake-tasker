@@ -112,10 +112,10 @@ async function turn(phone, state) {
     }
   }
 
-  const lockdownButton = phone.button('🔒 Start Lockdown');
-  if (/You are the Traitor/.test(text) && await lockdownButton.count() && await lockdownButton.isEnabled()
-    && Math.random() < 0.02) {
+  const lockdownButton = phone.button('Lockdown');
+  if (/You are the Traitor/.test(text) && await lockdownButton.count() && Math.random() < 0.02) {
     await lockdownButton.click();
+    await phone.button('Tap again to lock everyone down').click();
     say(`${phone.name} started a lockdown`);
     return;
   }

@@ -112,7 +112,11 @@ function Countdown() {
               </div>
             )}
 
-            {role === 'Crewmate' && !tasksBlocked && (
+            {role === 'Crewmate' && !tasksBlocked && lockdown.state.active && (
+              <p className="tasks-locked">Your tasks are locked until the lockdown is lifted.</p>
+            )}
+
+            {role === 'Crewmate' && !tasksBlocked && !lockdown.state.active && (
               <div>
                 <h3>Your Tasks</h3>
                 <div className="task-list">
@@ -164,13 +168,6 @@ function Countdown() {
                     secondsLeft={killCooldownLeft}
                     totalSeconds={killCooldown}
                     tone="warn"
-                  />
-                )}
-                {lockdown.state.enabled && !lockdown.state.active && (
-                  <LockdownTrigger
-                    cooldownLeft={lockdown.state.cooldownLeft}
-                    cooldownTotal={lockdown.state.cooldownTotal}
-                    onStart={lockdown.actions.start}
                   />
                 )}
                 {fellowImposters.length > 0 && (
@@ -249,6 +246,8 @@ function Countdown() {
                 />
               )}
             </div>
+
+            {lockdown.state.canStart && <LockdownTrigger onStart={lockdown.actions.start} />}
 
             <LeaveGame
               gameCode={gameCode}

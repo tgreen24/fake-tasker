@@ -205,6 +205,9 @@ const scenarios = {
     record('every phone shows the lockdown', missing.length === 0, missing.join(' | '));
     record('nobody can call a meeting during it',
       (await game.byName[game.taskers[0]].button('🚨 Emergency Meeting').count()) === 0);
+    const tasker = game.byName[game.taskers[0]];
+    record('taskers cannot tick off tasks during it',
+      (await tasker.page.locator('.task-list').count()) === 0 && /tasks are locked/.test(await tasker.text()));
 
     const taskerPairs = lockdown.pairs.filter((pair) => game.taskers.includes(pair.giver)
       && pair.receivers.some((name) => game.taskers.includes(name)));
@@ -243,11 +246,19 @@ const scenarios = {
     await until(async () => !(await readGame(game.code)).lockdown, { timeout: 8000, what: 'lifted' })
       .then(({ ms }) => record('enough codes lift it', true, `${ms}ms`))
       .catch(() => record('enough codes lift it', false));
-    const after = await readGame(game.code);
-    record('the round carries on, with the lockdown cooling down', !after.gameEnded && !!after.lockdownCooldown);
     await Promise.all(game.phones.map((phone) => until(async () => /Lockdown lifted/.test(await phone.text()), { timeout: 6000, what: phone.name })))
       .then(() => record('every phone says it was lifted', true))
       .catch(() => record('every phone says it was lifted', false));
+    const after = await readGame(game.code);
+    record('the round carries on, with the lockdown cooling down', !after.gameEnded && !!after.lockdownCooldown);
+    record('the traitor sees no lockdown button while it cools down',
+      (await game.byName[game.traitor].button('Lockdown').count()) === 0);
+    await until(async () => (await game.byName[game.traitor].button('Lockdown').count()) > 0, { timeout: 12000, what: 'button back' })
+      .then(() => record('the button comes back once it is ready', true))
+      .catch(() => record('the button comes back once it is ready', false));
+    await until(async () => (await tasker.page.locator('.task-list').count()) > 0, { timeout: 6000, what: 'tasks back' })
+      .then(() => record('tasks come back once it is lifted', true))
+      .catch(() => record('tasks come back once it is lifted', false));
     await settled(game.phones, game.code, { timeout: 8000, label: 'everyone back on the round' });
     return game.phones;
   },

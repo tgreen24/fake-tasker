@@ -1,16 +1,16 @@
 import React from 'react';
-import TimerBar from '../TimerBar';
+import ConfirmButton from '../ConfirmButton';
 
-function LockdownTrigger({ cooldownLeft, cooldownTotal, onStart }) {
+// Deliberately as plain as the Leave link beside it, and two taps so a
+// faint button cannot set a lockdown off by accident.
+function LockdownTrigger({ onStart }) {
   return (
-    <div className="lockdown-trigger">
-      <button className="end-game-btn" onClick={onStart} disabled={cooldownLeft > 0}>
-        🔒 Start Lockdown
-      </button>
-      {cooldownLeft > 0 && (
-        <TimerBar label="Lockdown ready in" secondsLeft={cooldownLeft} totalSeconds={cooldownTotal} tone="warn" />
-      )}
-    </div>
+    <ConfirmButton
+      className="leave-game lockdown-trigger"
+      label="Lockdown"
+      confirmLabel="Tap again to lock everyone down"
+      onConfirm={onStart}
+    />
   );
 }
 
