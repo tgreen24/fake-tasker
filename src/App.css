@@ -2200,3 +2200,219 @@ ul { list-style: none; margin: 0; padding: 0; }
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* ── fill the glass ── */
+
+.glass {
+  position: relative;
+  align-self: center;
+  width: 120px;
+  height: 190px;
+  border: 4px solid #cfd8e3;
+  border-top: 0;
+  border-radius: 0 0 22px 22px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .04);
+}
+
+.glass-milk {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f4f4f0;
+}
+
+.glass.spilled .glass-milk { background: var(--danger); }
+
+.glass-band {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  border-top: 3px dashed var(--accent);
+  border-bottom: 3px dashed var(--accent);
+  background: var(--accent-soft);
+  z-index: 1;
+}
+
+.glass.filled { border-color: var(--success); }
+.glass-status { text-align: center; min-height: 1.2em; }
+
+.pour-button {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  min-height: 56px;
+  font-size: 1.1rem;
+}
+
+/* ── put away the groceries ── */
+
+.put-away-counter {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 8px;
+  min-height: 170px;
+}
+
+.put-away-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 1.8rem;
+}
+
+.put-away-side small { font-size: .7rem; color: var(--text-dim); font-weight: 700; }
+
+.grocery-card {
+  justify-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 140px;
+  height: 150px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow);
+  font-size: 3.4rem;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.grocery-card small { font-size: .9rem; color: var(--text); font-weight: 700; }
+.grocery-card.dragging { cursor: grabbing; }
+.grocery-card.empty { color: var(--success); font-size: 3rem; }
+
+.put-away-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.put-away-buttons button { background: var(--surface-raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.put-away-buttons button:hover:not(:disabled) { background: var(--surface); }
+
+/* ── count the cookies ── */
+
+.cookie-plate {
+  position: relative;
+  align-self: center;
+  width: min(100%, 230px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0 60%, #e3e8ee 61% 100%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+}
+
+.cookie {
+  position: absolute;
+  font-size: 1.9rem;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+}
+
+.cookie-napkin {
+  position: absolute;
+  inset: 12%;
+  border-radius: 12px;
+  background: repeating-linear-gradient(45deg, #e5484d 0 12px, #f4f4f0 12px 24px);
+  transform: rotate(8deg);
+  box-shadow: var(--shadow);
+}
+
+.cookie-answers {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cookie-answers button { font-size: 1.4rem; padding: 12px 0; }
+
+/* ── game night dice ── */
+
+.dice-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 84px));
+  justify-content: center;
+  gap: 12px;
+}
+
+.die {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.die:hover:not(:disabled) { background: none; }
+
+.die-face {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 10px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: #f4f4f0;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15);
+}
+
+.die-face span { display: grid; place-items: center; }
+.die-face .pip::after { content: ''; width: 70%; aspect-ratio: 1; border-radius: 50%; background: #1d2530; }
+.die.held .die-face { box-shadow: inset 0 0 0 4px var(--accent), inset 0 -4px 0 rgba(0, 0, 0, .15); }
+.die small { font-size: .7rem; font-weight: 800; letter-spacing: .1em; color: var(--accent); }
+.die.rolling .die-face { animation: die-roll .45s ease; }
+
+@keyframes die-roll {
+  30% { transform: rotate(-18deg) scale(.92); }
+  70% { transform: rotate(14deg) scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die.rolling .die-face { animation: none; }
+}
+
+.dice-roll { font-size: 1.1rem; }
+
+/* ── sweep the floor ── */
+
+.floor {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  background: repeating-linear-gradient(90deg, #8a6a4a 0 38px, #7d5f41 38px 40px);
+  touch-action: none;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.dustpan {
+  position: absolute;
+  bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #3b6fd8;
+  box-shadow: inset 0 6px 0 #2d58b0;
+}
+
+.dust {
+  position: absolute;
+  width: 34px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 60%, #b9b2a6 0 40%, rgba(185, 178, 166, .6) 60%, rgba(185, 178, 166, 0) 72%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

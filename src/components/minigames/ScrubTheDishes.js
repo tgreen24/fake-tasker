@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PLATES, isClean, makeGrime } from '../../game/minigames/dishes';
 import { useOnSolved } from './useOnSolved';
+import { useDrag } from './useDrag';
 
 const NEXT_PLATE_MS = 500;
 const BRUSH = 0.14;
@@ -90,31 +91,29 @@ function Plate({ number, onDone }) {
     check();
   };
 
-  const onPointerDown = (event) => {
-    if (clean) return;
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    state.current.scrubbing = true;
-    state.current.last = null;
-    scrub(point(event));
-  };
-  const onPointerMove = (event) => {
-    if (state.current.scrubbing && !clean) scrub(point(event));
-  };
-  const stop = () => {
-    if (state.current.scrubbing && !clean) check({ now: true });
-    state.current.scrubbing = false;
-    state.current.last = null;
-  };
+  const dragHandlers = useDrag({
+    onStart: (event) => {
+      if (clean) return;
+      state.current.scrubbing = true;
+      state.current.last = null;
+      scrub(point(event));
+    },
+    onMove: (event) => {
+      if (state.current.scrubbing && !clean) scrub(point(event));
+    },
+    onEnd: () => {
+      if (state.current.scrubbing && !clean) check({ now: true });
+      state.current.scrubbing = false;
+      state.current.last = null;
+    }
+  });
 
   return (
     <>
       <p className="minigame-step">Plate {number} of {PLATES}</p>
       <div
         className={`plate ${clean ? 'clean' : ''}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={stop}
-        onPointerCancel={stop}
+        {...dragHandlers()}
       >
         <canvas
           ref={canvas}

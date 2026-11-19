@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import Clothing from './Clothing';
 import { BASKETS, dealLaundry } from '../../game/minigames/laundry';
 import { useOnSolved } from './useOnSolved';
+import { useDrag } from './useDrag';
 
 const DRAG_START_PX = 8;
 const LABELS = { whites: 'Whites', colors: 'Colors' };
@@ -36,23 +37,28 @@ function SortTheLaundry({ onSolved }) {
     return box && x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
   });
 
-  const onPointerDown = (id) => (event) => {
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    setDrag({ id, startX: event.clientX, startY: event.clientY, dx: 0, dy: 0, moving: false });
-  };
-  const onPointerMove = (event) => {
-    if (!drag) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    const moving = drag.moving || Math.hypot(dx, dy) > DRAG_START_PX;
-    setDrag({ ...drag, dx, dy, moving });
-  };
-  const onPointerUp = (event) => {
-    if (!drag) return;
-    if (drag.moving) drop(drag.id, basketAt(event.clientX, event.clientY));
-    else setSelected((now) => (now === drag.id ? null : drag.id));
-    setDrag(null);
-  };
+  // Where the current drag started and whether it has gone far enough to be
+  // a drag rather than a tap. Kept in a ref so the release reads it directly.
+  const start = useRef(null);
+  const dragHandlers = useDrag({
+    onStart: (event, id) => {
+      start.current = { x: event.clientX, y: event.clientY, moving: false };
+      setDrag({ id, dx: 0, dy: 0, moving: false });
+    },
+    onMove: (event, id) => {
+      const dx = event.clientX - start.current.x;
+      const dy = event.clientY - start.current.y;
+      start.current.moving = start.current.moving || Math.hypot(dx, dy) > DRAG_START_PX;
+      setDrag({ id, dx, dy, moving: start.current.moving });
+    },
+    onEnd: (event, { cancelled }, id) => {
+      const { moving } = start.current;
+      setDrag(null);
+      if (cancelled) return;
+      if (moving) drop(id, basketAt(event.clientX, event.clientY));
+      else setSelected((now) => (now === id ? null : id));
+    }
+  });
 
   return (
     <div className="minigame sort-laundry">
@@ -77,10 +83,7 @@ function SortTheLaundry({ onSolved }) {
               aria-label={`${piece.basket === 'whites' ? 'White' : 'Colored'} ${piece.kind}`}
               aria-pressed={selected === piece.id}
               disabled={sorted.includes(piece.id)}
-              onPointerDown={onPointerDown(piece.id)}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={() => setDrag(null)}
+              {...dragHandlers(piece.id)}
               onClick={(event) => {
                 if (event.detail === 0) setSelected((now) => (now === piece.id ? null : piece.id));
               }}

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { chromium, webkit } from 'playwright';
-import { Phone, pause, serve } from './phones.mjs';
+import { Phone, pause, serve, until } from './phones.mjs';
 
 // Plays every Practice minigame through its screen, the way a person would --
 // real drags, real five second holds -- on a small phone, and fails any that
@@ -58,6 +58,24 @@ async function dragTo(page, from, to) {
     await pause(20);
   }
   await page.mouse.up();
+}
+
+// A press whose release never arrives -- as when the browser starts its own
+// drag and stops sending pointer events -- followed by the mouse moving with
+// no button held. Whatever was pressed must not follow it.
+async function lostRelease(phone, selector) {
+  const box = await phone.page.locator(selector).first().boundingBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await phone.page.evaluate(([sel, px, py]) => {
+    document.querySelector(sel).dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true,
+      button: 0, buttons: 1, clientX: px, clientY: py
+    }));
+  }, [selector, x, y]);
+  await phone.page.mouse.move(x + 3, y + 3);
+  await phone.page.mouse.move(x - 80, y + 40, { steps: 6 });
+  await pause(150);
 }
 
 const solvers = {
@@ -153,6 +171,8 @@ const solvers = {
   },
 
   async 'Sort the Laundry'(phone) {
+    await lostRelease(phone, '.laundry-piece');
+    record('a lost release leaves the piece in place', (await phone.page.locator('.laundry-piece.dragging').count()) === 0);
     const pieces = phone.page.locator('.laundry-piece');
     const labels = await pieces.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('aria-label')));
     const basketFor = (label) => phone.button(label.startsWith('White') ? 'Whites basket' : 'Colors basket');
@@ -281,6 +301,114 @@ const solvers = {
       const lit = phone.page.locator('.house-window.lit');
       if (await lit.count()) await lit.first().click({ timeout: 500 }).catch(() => {});
       else await pause(50);
+    }
+  },
+
+  async 'Fill the Glass'(phone) {
+    const pour = phone.button(/^Hold to pour/, false);
+    const level = async () => Number((await pour.getAttribute('aria-label')).match(/(\d+) percent/)[1]);
+    for (let glass = 1; glass <= 3; glass++) {
+      await phone.page.getByText(`Glass ${glass} of 3`).waitFor({ timeout: 4000 });
+      const box = await pour.boundingBox();
+      if (glass === 1) {
+        await phone.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await phone.page.mouse.down();
+        await phone.page.getByText('Too full! It spilled').waitFor({ timeout: 4000 })
+          .then(() => record('pouring past the top line spills it', true))
+          .catch(() => record('pouring past the top line spills it', false));
+        await phone.page.mouse.up();
+        await until(async () => (await level()) === 0 && await pour.isEnabled(), { timeout: 3000, what: 'empty glass' });
+      }
+      const low = Number(await pour.getAttribute('data-low'));
+      const high = Number(await pour.getAttribute('data-high'));
+      const target = (low + high) / 2;
+      await phone.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await phone.page.mouse.down();
+      while ((await level()) < target) await pause(5);
+      await phone.page.mouse.up();
+    }
+  },
+
+  async 'Put Away the Groceries'(phone) {
+    await lostRelease(phone, '.grocery-card');
+    record('a lost release leaves the card in place', (await phone.page.locator('.grocery-card.dragging').count()) === 0);
+    for (let i = 0; i < 8; i++) {
+      const card = phone.page.locator('.grocery-card:not(.empty)');
+      await card.waitFor({ timeout: 3000 });
+      const place = await card.getAttribute('data-place');
+      if (i === 0) {
+        await phone.button(place === 'fridge' ? 'Pantry 🥫' : '❄️ Fridge').click();
+        record('the wrong side is refused', (await phone.page.locator('.grocery-card.missed').count()) === 1);
+      }
+      if (i % 2) {
+        await phone.button(place === 'fridge' ? '❄️ Fridge' : 'Pantry 🥫').click();
+      } else {
+        const box = await card.boundingBox();
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await phone.page.mouse.move(x, y);
+        await phone.page.mouse.down();
+        await phone.page.mouse.move(x + (place === 'fridge' ? -110 : 110), y, { steps: 6 });
+        await phone.page.mouse.up();
+      }
+      await pause(100);
+    }
+  },
+
+  async 'Count the Cookies'(phone) {
+    for (let plate = 1; plate <= 3; plate++) {
+      await phone.page.getByText(`Plate ${plate} of 3`).waitFor({ timeout: 4000 });
+      await phone.page.getByText('Count the cookies!').waitFor({ timeout: 4000 });
+      let count = await phone.page.locator('.cookie').count();
+      await phone.page.getByText('How many were there?').waitFor({ timeout: 4000 });
+      if (plate === 1) {
+        const answers = await phone.page.locator('.cookie-answers button').allInnerTexts();
+        const wrong = answers.map(Number).find((n) => n !== count);
+        await phone.button(`${wrong} cookies`).click();
+        await phone.page.getByText(/Not quite/).waitFor({ timeout: 2000 })
+          .then(() => record('a wrong count deals a new plate', true))
+          .catch(() => record('a wrong count deals a new plate', false));
+        await phone.page.getByText('Count the cookies!').waitFor({ timeout: 4000 });
+        count = await phone.page.locator('.cookie').count();
+        await phone.page.getByText('How many were there?').waitFor({ timeout: 4000 });
+      }
+      await phone.button(`${count} cookies`).click();
+    }
+  },
+
+  async 'Game Night Dice'(phone) {
+    for (let roll = 0; roll < 80; roll++) {
+      if (await phone.page.getByText('Three of a kind!').count()) return;
+      const labels = await phone.page.locator('.die').evaluateAll((nodes) => nodes.map((n) => n.getAttribute('aria-label')));
+      const faces = labels.map((label) => Number(label.match(/showing (\d)/)[1]));
+      const best = faces.slice().sort((a, b) => faces.filter((f) => f === b).length - faces.filter((f) => f === a).length)[0];
+      for (let i = 0; i < 3; i++) {
+        const held = labels[i].endsWith('held');
+        if ((faces[i] === best) !== held) await phone.page.locator('.die').nth(i).click();
+      }
+      await phone.button('🎲 Roll').click();
+      await until(async () => (await phone.page.getByText('Three of a kind!').count()) || phone.button('🎲 Roll').isEnabled(), { timeout: 3000, what: 'roll' });
+    }
+  },
+
+  async 'Sweep the Floor'(phone) {
+    const where = () => phone.page.locator('.dust').evaluateAll((nodes) => nodes.map((n) => `${n.dataset.x},${n.dataset.y}`).join(' '));
+    const before = await where();
+    await lostRelease(phone, '.dust');
+    record('a lost release does not drag the dust around', (await where()) === before);
+    for (let tries = 0; tries < 20; tries++) {
+      const dust = phone.page.locator('.dust');
+      if (!(await dust.count())) return;
+      const floor = await phone.page.locator('.floor').boundingBox();
+      const x = Number(await dust.first().getAttribute('data-x'));
+      const y = Number(await dust.first().getAttribute('data-y'));
+      const from = { x: floor.x + x * floor.width, y: floor.y + y * floor.height };
+      const to = { x: floor.x + 0.5 * floor.width, y: floor.y + 0.95 * floor.height };
+      await phone.page.mouse.move(from.x, from.y);
+      await phone.page.mouse.down();
+      await phone.page.mouse.move(to.x, to.y, { steps: 30 });
+      await phone.page.mouse.up();
+      await pause(100);
     }
   },
 
