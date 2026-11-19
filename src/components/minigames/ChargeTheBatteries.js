@@ -32,8 +32,11 @@ function ChargeTheBatteries({ onSolved }) {
   const full = levels.every((level) => level >= 1);
   useOnSolved(full, onSolved);
 
+  // One battery at a time: a second finger on another does nothing until
+  // the first lets go, so charging all three takes the full time.
   const press = (i) => (event) => {
     event.preventDefault();
+    if (held.current.size > 0) return;
     if (event.currentTarget.setPointerCapture) event.currentTarget.setPointerCapture(event.pointerId);
     held.current.add(i);
   };

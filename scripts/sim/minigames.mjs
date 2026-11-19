@@ -83,6 +83,24 @@ const solvers = {
 
   async 'Charge the Batteries'(phone) {
     const batteries = phone.page.locator('.battery');
+    // Two fingers at once, as separate touches: only the first may charge.
+    await phone.page.evaluate(() => {
+      const [first, second] = document.querySelectorAll('.battery');
+      const touch = (node, pointerId, type) => node.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId, pointerType: 'touch', isPrimary: pointerId === 1
+      }));
+      touch(first, 1, 'pointerdown');
+      touch(second, 2, 'pointerdown');
+      window.__releaseBatteries = () => {
+        touch(first, 1, 'pointerup');
+        touch(second, 2, 'pointerup');
+      };
+    });
+    await pause(1500);
+    const second = await batteries.nth(1).getAttribute('aria-label');
+    await phone.page.evaluate(() => window.__releaseBatteries());
+    record('a second finger on another battery does not charge it', /, 0 percent/.test(second), second);
+    await pause(3000);
     await hold(phone.page, batteries.nth(0), 1500);
     await pause(1500);
     const drained = await batteries.nth(0).getAttribute('aria-label');
@@ -152,6 +170,120 @@ const solvers = {
     }
   },
 
+  async 'Make Change'(phone) {
+    let triedTooMuch = false;
+    for (let customer = 1; customer <= 3; customer++) {
+      await phone.page.getByText(`Customer ${customer} of 3`).waitFor({ timeout: 3000 });
+      const amounts = await phone.page.locator('.change-receipt strong').allInnerTexts();
+      const [price, paid] = amounts.map((text) => Math.round(Number(text.replace('$', '')) * 100));
+      let owed = paid - price;
+      if (customer === 1 && owed >= 75) {
+        const quarter = phone.page.getByRole('button', { name: /^Give 25¢/ });
+        for (let i = 0; i < 3; i++) await quarter.click();
+        record('the quarters run out after three', await quarter.isDisabled());
+        await phone.button('Take it back').click();
+      }
+      if (!triedTooMuch && owed < 1000) {
+        triedTooMuch = true;
+        await phone.page.getByRole('button', { name: /^Give \$10/ }).click();
+        await phone.page.getByText('Too much! Start again').waitFor({ timeout: 2000 })
+          .then(() => record('too much change is refused', true))
+          .catch(() => record('too much change is refused', false));
+        await phone.page.getByText('Change given: $0.00').waitFor({ timeout: 3000 });
+      }
+      for (const [cents, label] of [[1000, '$10'], [500, '$5'], [100, '$1'], [25, '25¢']]) {
+        while (owed >= cents) {
+          await phone.page.getByRole('button', { name: new RegExp(`^Give ${label.replace('$', '\\$')},`) }).click();
+          owed -= cents;
+        }
+      }
+    }
+  },
+
+  async 'Program the Microwave'(phone) {
+    const watch = async () => {
+      const seen = [];
+      let showing = null;
+      const keys = phone.page.locator('.microwave-key');
+      await phone.page.getByText('WATCH', { exact: true }).waitFor({ timeout: 4000 });
+      while (await keys.first().isDisabled()) {
+        const lit = await phone.page.locator('.microwave-key[data-lit]').first().innerText({ timeout: 50 }).catch(() => null);
+        if (lit && lit !== showing) seen.push(lit);
+        showing = lit;
+        await pause(30);
+      }
+      return seen;
+    };
+    for (let round = 1; round <= 3; round++) {
+      await phone.page.getByText(`Round ${round} of 3`).waitFor({ timeout: 4000 });
+      let pattern = await watch();
+      if (round === 1) {
+        const wrong = ['1', '2', '3'].find((key) => key !== pattern[0]);
+        await phone.button(`Key ${wrong}`).click();
+        await phone.page.getByText('ERROR', { exact: true }).waitFor({ timeout: 2000 })
+          .then(() => record('a wrong key replays the pattern', true))
+          .catch(() => record('a wrong key replays the pattern', false));
+        pattern = await watch();
+      }
+      record(`round ${round} shows ${round + 2} keys`, pattern.length === round + 2, pattern.join(''));
+      for (const key of pattern) await phone.button(`Key ${key}`).click();
+    }
+  },
+
+  async 'Find the Remote'(phone) {
+    const follow = async () => {
+      await phone.page.getByText('Watch where the remote goes').waitFor({ timeout: 5000 });
+      const marked = phone.page.locator('.cushion[data-remote]');
+      await marked.first().waitFor({ timeout: 5000 });
+      const label = await marked.first().getAttribute('aria-label');
+      await phone.page.getByText('Which cushion is it under?').waitFor({ timeout: 8000 });
+      return label;
+    };
+    for (let round = 1; round <= 3; round++) {
+      await phone.page.getByText(`Round ${round} of 3`).waitFor({ timeout: 5000 });
+      let label = await follow();
+      if (round === 1) {
+        const wrong = ['Cushion 1', 'Cushion 2', 'Cushion 3'].find((name) => name !== label);
+        await phone.button(wrong).click();
+        await phone.page.getByText('Not there! Watch again').waitFor({ timeout: 2000 })
+          .then(() => record('a wrong cushion shows where it was and goes again', true))
+          .catch(() => record('a wrong cushion shows where it was and goes again', false));
+        label = await follow();
+      }
+      await phone.button(label).click();
+    }
+  },
+
+  async 'Scrub the Dishes'(phone) {
+    // Rub back and forth across whichever plate is up, never off its edge,
+    // until the last one is done.
+    for (let pass = 0; pass < 12; pass++) {
+      if (await phone.page.getByText('Dishes done!').count()) return;
+      const box = await phone.page.locator('.plate').boundingBox();
+      const r = box.width / 2;
+      const cx = box.x + r;
+      const cy = box.y + r;
+      const across = (dy) => Math.sqrt(Math.max(0, (r - 10) ** 2 - dy ** 2));
+      await phone.page.mouse.move(cx, cy - r + 14);
+      await phone.page.mouse.down();
+      for (let dy = -r + 14; dy < r - 14; dy += 12) {
+        await phone.page.mouse.move(cx - across(dy), cy + dy, { steps: 4 });
+        await phone.page.mouse.move(cx + across(dy), cy + dy + 6, { steps: 4 });
+      }
+      await phone.page.mouse.up();
+      await pause(700);
+    }
+  },
+
+  async 'Turn Off the Lights'(phone) {
+    const started = Date.now();
+    while (!(await phone.page.getByText('Lights out. Goodnight!').count()) && Date.now() - started < 40000) {
+      const lit = phone.page.locator('.house-window.lit');
+      if (await lit.count()) await lit.first().click({ timeout: 500 }).catch(() => {});
+      else await pause(50);
+    }
+  },
+
   async 'Tap in Order'(phone) {
     for (let n = 1; n <= 9; n++) await phone.button(`Tap ${n}`).click();
   }
@@ -162,7 +294,9 @@ const browser = await engine.launch({ headless: process.env.SIM_HEADED !== '1' }
 const phone = await new Phone(browser, 'Player').open();
 await phone.page.setViewportSize({ width: WIDTH, height: 700 });
 
+const only = process.env.MINIGAME;
 for (const [name, solve] of Object.entries(solvers)) {
+  if (only && !name.toLowerCase().includes(only.toLowerCase())) continue;
   console.log(`\n▶ ${name}`);
   await phone.goto('/practice');
   await phone.button(name).click();
