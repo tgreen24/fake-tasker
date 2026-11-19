@@ -1,18 +1,10 @@
 import React, { useMemo, useState } from 'react';
-
-const shuffle = (list) => {
-  const copy = list.slice();
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-};
+import { shuffled } from '../../game/random';
 
 // Numbers scattered over a grid, tapped from lowest to highest. A wrong tap
 // starts it over, so mashing is slower than looking.
 function TapInOrder({ count = 9, onSolved }) {
-  const tiles = useMemo(() => shuffle(Array.from({ length: count }, (_, i) => i + 1)), [count]);
+  const tiles = useMemo(() => shuffled(Array.from({ length: count }, (_, i) => i + 1)), [count]);
   const [next, setNext] = useState(1);
   const [missed, setMissed] = useState(0);
 

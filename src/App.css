@@ -1687,7 +1687,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .tap-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1737,3 +1737,237 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .practice-result p { margin: 0; font-weight: 700; color: var(--success); }
+
+/* Shared by every minigame: nothing in one may be selected, called up by a
+   long press, or scroll the page while it is being played. */
+.minigame button {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.minigame-instructions { text-align: center; }
+
+.minigame .missed { animation: minigame-shake .3s ease; }
+
+/* ── match the socks ── */
+
+.sock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sock-card {
+  aspect-ratio: 3 / 4;
+  padding: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition: background .15s ease;
+}
+
+.sock-card.face-up { background: var(--surface-sunk); }
+.sock-card.matched { box-shadow: inset 0 0 0 2px var(--success); }
+.sock { display: block; width: 100%; height: 100%; min-width: 0; }
+
+/* ── charge the batteries ── */
+
+.battery-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.battery {
+  flex: 0 1 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  touch-action: none;
+}
+
+.battery:hover:not(:disabled) { background: none; }
+
+.battery-cap {
+  width: 40%;
+  height: 10px;
+  border-radius: 4px 4px 0 0;
+  background: var(--border-strong);
+}
+
+.battery-body {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 3px var(--border-strong);
+}
+
+.battery-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--warn);
+}
+
+.battery.full .battery-fill { background: var(--success); }
+.battery.full .battery-body { box-shadow: inset 0 0 0 3px var(--success); }
+
+.battery-bolt {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.8rem;
+  color: var(--text);
+}
+
+/* ── fix the wiring ── */
+
+.wiring-board {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  height: 280px;
+  padding: 8px 0;
+}
+
+.wiring-lines {
+  grid-column: 2;
+  grid-row: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.wiring-column {
+  grid-row: 1;
+  display: grid;
+  grid-template-rows: repeat(4, 1fr);
+  align-items: center;
+}
+
+.wiring-column:first-of-type { grid-column: 1; }
+.wiring-column:last-of-type { grid-column: 3; }
+
+.wire-end {
+  width: 56px;
+  height: 48px;
+  padding: 0;
+  font-size: 1.2rem;
+  color: rgba(0, 0, 0, .55);
+  background: var(--wire);
+  border-radius: 10px;
+}
+
+.wire-end:hover:not(:disabled) { background: var(--wire); filter: brightness(1.1); }
+.wire-end.picked { box-shadow: 0 0 0 3px var(--text); }
+.wire-end.connected { opacity: .55; }
+
+/* ── unscramble ── */
+
+.unscramble-slots,
+.unscramble-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--letters, 6), minmax(0, 44px));
+  justify-content: center;
+  gap: 6px;
+}
+
+.minigame-step {
+  margin: 0;
+  text-align: center;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.unscramble-hint { align-self: center; margin: 0; }
+
+.letter-slot,
+.letter-tile {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  border-radius: 8px;
+}
+
+.letter-slot {
+  background: var(--surface-sunk);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.letter-slot:hover:not(:disabled) { background: var(--surface-sunk); }
+.unscramble-slots.solved .letter-slot { box-shadow: inset 0 0 0 2px var(--success); color: var(--success); }
+.unscramble-slots.missed .letter-slot { box-shadow: inset 0 0 0 2px var(--danger); }
+
+.letter-tile { background: var(--surface-raised); color: var(--text); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.letter-tile.used { visibility: hidden; }
+
+/* ── sort the laundry ── */
+
+.laundry-pile {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.laundry-piece {
+  aspect-ratio: 1;
+  padding: 8px;
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  touch-action: none;
+  position: relative;
+}
+
+.laundry-piece:hover:not(:disabled) { background: var(--surface-raised); }
+.laundry-piece.selected { box-shadow: inset 0 0 0 3px var(--accent); }
+.laundry-piece.dragging { z-index: 2; opacity: .9; transition: none; }
+.laundry-piece.sorted { visibility: hidden; }
+.clothing { display: block; width: 100%; height: 100%; min-width: 0; }
+
+.laundry-baskets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.laundry-basket {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 8px;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--surface-sunk);
+  box-shadow: inset 0 0 0 2px var(--border-strong);
+}
+
+.laundry-basket span { font-size: 2rem; }
+.laundry-basket small { color: var(--text-dim); font-weight: 500; }
+.laundry-basket.whites { box-shadow: inset 0 0 0 2px #e3e6ea; }
+.laundry-basket.colors { box-shadow: inset 0 0 0 2px var(--accent); }
+
+/* The app's buttons go accent blue on hover; game pieces keep their own look. */
+.sock-card:hover:not(:disabled),
+.tap-tile:hover:not(:disabled),
+.letter-tile:hover:not(:disabled) { background: var(--surface-raised); }
+.sock-card.face-up:hover:not(:disabled),
+.laundry-basket:hover:not(:disabled) { background: var(--surface-sunk); }
+.tap-tile.tapped:hover:not(:disabled) { background: var(--success-soft); }

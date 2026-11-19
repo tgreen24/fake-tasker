@@ -1,3 +1,5 @@
+import { shuffled } from './random';
+
 // Lockdown: a sabotage a living traitor sets off. Every living player is put in
 // a pair, as either the one giving a code or the one entering it, and the
 // taskers have a short time to pass enough codes along by hand.
@@ -22,15 +24,6 @@ export const CODE_LENGTH = 6;
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 const TRAITOR = 'Imposter';
-
-function shuffled(list, random) {
-  const copy = list.slice();
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
 
 export function makeCode(random = Math.random) {
   let code = '';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ScreenHeader from './components/ScreenHeader';
-import { MINIGAMES } from './game/minigames';
+import { MINIGAMES } from './components/minigames';
 
 function PracticeRun({ game }) {
   const [attempt, setAttempt] = useState(0);
@@ -49,7 +49,9 @@ function Practice() {
             <ul className="practice-list">
               {MINIGAMES.map((entry) => (
                 <li key={entry.id}>
-                  <button onClick={() => setChosen(entry.id)}>{entry.name}</button>
+                  <button onClick={() => setChosen(entry.id)}>
+                    <span aria-hidden="true">{entry.icon}</span> {entry.name}
+                  </button>
                 </li>
               ))}
             </ul>
