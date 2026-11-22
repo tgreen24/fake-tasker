@@ -10,6 +10,7 @@ import { deriveLobbyState, tasksEachWithin, validateNewTask, validateStart } fro
 import { activePackId, packById, roomsIn, withPackSelected } from '../game/taskPacks';
 import { buildRound } from '../game/roleAssignment';
 import { currentUid } from '../firebase';
+import { seatTakenElsewhere } from '../game/seats';
 import { withTimeout, isTimeout } from '../withTimeout';
 import { usePlayerName } from './usePlayerName';
 import { useGameSync } from './useGameSync';
@@ -130,8 +131,8 @@ export function useLobby(gameCode) {
   return {
     state: {
       ...lobby, gameCode, playerName, newTask, starting, errorMessage,
-      seatLost: !!gameData?.playerUids?.[playerName] && gameData.playerUids[playerName] !== currentUid(),
-      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+      seatLost: seatTakenElsewhere(gameData, playerName, currentUid()),
+      seatMoves: gameData?.seatMoves || {},
       activePack: activePackId(lobby.tasks)
     },
     actions,

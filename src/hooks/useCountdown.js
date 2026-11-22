@@ -5,7 +5,10 @@ import {
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
 import { deriveRoundState, targetTap, toggledTaskList } from '../game/roundState';
+import { guideCards, roundBody, roundDock, roundTabs, statusLine } from '../game/roundView';
+import { firstTime } from '../seenOnce';
 import { currentUid } from '../firebase';
+import { seatTakenElsewhere } from '../game/seats';
 import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
 import { useNow } from './useNow';
 import { usePlayerName } from './usePlayerName';
@@ -21,7 +24,9 @@ const TASK_WAIT_MS = 10000;
 const BRING_BACK_WINDOW_MS = 4000;
 
 const OPENING_COUNTDOWN_SECONDS = 3;
-const REVEAL_HOLD_MS = 3800;
+// How long the role stays up at the start of a round before it hides itself.
+const REVEAL_MS = Number(process.env.REACT_APP_REVEAL_MS) || 6000;
+const KILLED_MS = 6500;
 const INTRO_WINDOW_MS = 10000;
 const LATE_REVEAL_MS = 8000;
 
@@ -35,14 +40,15 @@ function justHappened(timestamp, now = Date.now()) {
 export function useCountdown(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
-  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName);
+  const { privateData, roleLoading } = usePrivateRole(gameCode, playerName, gameData?.playerUids?.[playerName]);
   useSettleOutcome(gameCode, gameData);
   usePublishOutRoles(gameCode, gameData, playerName, privateData);
   const lockdown = useLockdown(gameCode, gameData, playerName, privateData);
 
   const [countdown, setCountdown] = useState(null);
-  const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
-  const [blended, setBlended] = useState(false);
+  const [revealing, setRevealing] = useState(false);
+  const [killedMoment, setKilledMoment] = useState(false);
+  const [taskTab, setTaskTab] = useState('todo');
   // The dead target waiting on a second tap to be brought back.
   const [armedTarget, setArmedTarget] = useState(null);
   // A tap that has not come back yet. Completing is a toggle decided from the
@@ -81,6 +87,7 @@ export function useCountdown(gameCode) {
   useEffect(() => {
     setPlaying(null);
     setShowingCover(false);
+    setTaskTab('todo');
   }, [roundStartedAt]);
 
   // A role that lands after the vote's result screen has gone would otherwise
@@ -126,17 +133,32 @@ export function useCountdown(gameCode) {
     round.sabotageCooldownUntil, SABOTAGE_COOLDOWN_SECONDS, now
   );
 
-  // The role reveal is deliberately loud, then the screen blends back so a
-  // glance from across the room says nothing. Returning from a meeting skips
-  // the reveal entirely -- everyone is stood together at exactly that moment.
+  // The role is shown once, full screen, as the round opens -- then hidden, so
+  // a glance from across the room says nothing. Returning from a meeting skips
+  // it: everyone is stood together at exactly that moment.
+  const revealedFor = useRef(null);
   useEffect(() => {
-    if (round.returningFromMeeting || showIntro) {
-      setBlended(round.returningFromMeeting);
-      return undefined;
-    }
-    const timer = setTimeout(() => setBlended(true), REVEAL_HOLD_MS);
+    if (introKind !== 'opening' || showIntro || revealedFor.current === round.roundStartedAt) return;
+    revealedFor.current = round.roundStartedAt;
+    setRevealing(true);
+  }, [introKind, showIntro, round.roundStartedAt]);
+  useEffect(() => {
+    if (!revealing) return undefined;
+    const timer = setTimeout(() => setRevealing(false), REVEAL_MS);
     return () => clearTimeout(timer);
-  }, [round.returningFromMeeting, showIntro]);
+  }, [revealing]);
+
+  // Being killed plays once, quietly, the first time this phone sees it --
+  // not for being voted out, which everyone has just watched happen.
+  useEffect(() => {
+    if (!round.wasKilled || round.role !== 'Crewmate' || !gameCode || !round.roundStartedAt) return;
+    if (firstTime(`killed:${gameCode}:${round.roundStartedAt}`)) setKilledMoment(true);
+  }, [round.wasKilled, round.role, gameCode, round.roundStartedAt]);
+  useEffect(() => {
+    if (!killedMoment) return undefined;
+    const timer = setTimeout(() => setKilledMoment(false), KILLED_MS);
+    return () => clearTimeout(timer);
+  }, [killedMoment]);
 
   const actions = useMemo(() => ({
     // Resolves true once the change has landed, false if it did not.
@@ -206,12 +228,8 @@ export function useCountdown(gameCode) {
     callMeeting: () => callMeeting(gameCode, playerName),
     endRound: () => endRound(gameCode),
 
-    openSabotageDialog: () => setSabotageDialogOpen(true),
-    closeSabotageDialog: () => setSabotageDialogOpen(false),
-
     sabotage: async (crewmate) => {
       if (sabotageCooldownLeft > 0) return;
-      setSabotageDialogOpen(false);
       await startSabotage(gameCode, playerName, crewmate);
     },
 
@@ -224,10 +242,13 @@ export function useCountdown(gameCode) {
     toggleCoverTask: (task) => {
       if (!lockdown.state.active) cover.toggleFake(task);
     },
-    switchView: () => {
+    selectTab: (tab) => {
       setPlaying(null);
-      setShowingCover((now) => !now);
-    }
+      if (round.role === 'Imposter') setShowingCover(tab === 'tasks');
+      else setTaskTab(tab);
+    },
+    dismissReveal: () => setRevealing(false),
+    dismissKilled: () => setKilledMoment(false)
   }), [
     cover, tasksStopped,
     lockdown.state.active,
@@ -249,21 +270,63 @@ export function useCountdown(gameCode) {
     return actions.toggleTask(playing.task);
   }, [playing, cover, actions]);
 
+  const tab = round.role === 'Imposter' ? (showingCover ? 'tasks' : 'targets') : taskTab;
+  const situation = {
+    role: round.role,
+    isDead: round.isDead,
+    tasksBlocked: round.tasksBlocked,
+    lockdownActive: lockdown.state.active,
+    lockdownEnabled: lockdown.state.enabled,
+    sabotageActive: round.sabotageActive,
+    tab,
+    tasks: round.tasks,
+    completed: completedTasks,
+    fakeTasks: cover.fakeTasks,
+    targetsLeft: round.targets.filter((target) => !target.out).length
+  };
+  const body = roundBody(situation);
+  const view = {
+    body,
+    tab,
+    tabs: roundTabs(situation),
+    dock: roundDock(situation),
+    status: statusLine(body, {
+      tasks: round.tasks,
+      completed: completedTasks,
+      fakeTasks: cover.fakeTasks,
+      fakeCompleted: cover.fakeCompleted,
+      fellowImposters: round.fellowImposters,
+      killCooldownLeft,
+      sabotageCooldownLeft
+    }),
+    guide: guideCards({
+      body,
+      role: round.role,
+      tasksLeft: round.tasks.filter((task) => !completedTasks.includes(task)).length,
+      sabotagingImposter: round.sabotagingImposter,
+      killCooldown: round.killCooldown,
+      lockdownEnabled: lockdown.state.enabled
+    })
+  };
+
   return {
     state: {
       ...round, completedTasks, playerName,
       fakeTasks: cover.fakeTasks, fakeCompleted: cover.fakeCompleted, playing, showingCover,
-      seatLost: !!gameData?.playerUids?.[playerName] && gameData.playerUids[playerName] !== currentUid(),
-      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+      seatLost: seatTakenElsewhere(gameData, playerName, currentUid()),
+      seatMoves: gameData?.seatMoves || {},
       showIntro,
       introKind,
       countdown: countdown === null ? OPENING_COUNTDOWN_SECONDS : countdown,
       killCooldownLeft, sabotageCooldownLeft, armedTarget,
-      sabotageCooldownTotal: SABOTAGE_COOLDOWN_SECONDS,
-      sabotageDialogOpen,
-      blended,
+      // Also true in the one render between the countdown ending and the
+      // effect starting the reveal, so the round screen never flashes first.
+      revealing: revealing
+        || (introKind === 'opening' && !showIntro && revealedFor.current !== round.roundStartedAt),
+      killedMoment,
       lateReveal,
-      awaitingOthers: round.awaitingReveal.filter((name) => name !== playerName)
+      awaitingOthers: round.awaitingReveal.filter((name) => name !== playerName),
+      view
     },
     actions: { ...actions, solvePlaying },
     lockdown,

@@ -45,13 +45,17 @@ const stamp = () => new Date().toLocaleTimeString();
 const say = (line) => console.log(`${stamp()}  ${line}`);
 
 async function unpressed(phone, scope) {
-  const buttons = phone.page.locator(`${scope} [role="button"][aria-pressed="false"]`);
+  const buttons = phone.page.locator(`${scope} :is(button, [role="button"])[aria-pressed="false"]`);
   const labels = [];
   for (let i = 0; i < await buttons.count(); i++) labels.push(await buttons.nth(i).getAttribute('aria-label'));
   return labels.filter(Boolean);
 }
 
-async function lockdownTurn(phone, state, text) {
+// Read off the screen's shape: the role itself is never shown after the reveal.
+const isTraitor = async (phone) => (await phone.page.getByRole('tab', { name: /^Targets ·/ }).count()) > 0;
+const isTasker = async (phone) => (await phone.page.getByRole('tab', { name: /^To do ·/ }).count()) > 0;
+
+async function lockdownTurn(phone, state) {
   const panel = phone.page.locator('.lockdown');
   if (await panel.locator('.tap-in-order').count()) {
     await pause(between(2000, 6000));
@@ -73,7 +77,7 @@ async function lockdownTurn(phone, state, text) {
   }
 
   const entry = phone.page.locator('.lockdown-entry');
-  if (!(await entry.count()) || /You are the Traitor/.test(text)) return;
+  if (!(await entry.count()) || await isTraitor(phone)) return;
   const from = (await entry.locator('strong').innerText()).trim();
   const code = codesFromBots[from] || inboxCodeFor(phone.name);
   if (!code || state.tried === code) return;
@@ -89,7 +93,7 @@ async function turn(phone, state) {
   const text = await phone.page.locator('body').innerText().catch(() => '');
 
   if (path.startsWith('/countdown') && await phone.page.locator('.lockdown').count()) {
-    await lockdownTurn(phone, state, text);
+    await lockdownTurn(phone, state);
     return;
   }
 
@@ -105,9 +109,9 @@ async function turn(phone, state) {
     return;
   }
 
-  if (!path.startsWith('/countdown') || /You are a Dead/.test(text)) return;
+  if (!path.startsWith('/countdown') || /Ghosts don't call meetings/.test(text)) return;
 
-  if (/You are a Tasker/.test(text) && Math.random() < 0.1) {
+  if (await isTasker(phone) && Math.random() < 0.1) {
     const todo = await unpressed(phone, '.task-list');
     if (todo.length) {
       const label = pick(todo);
@@ -125,15 +129,20 @@ async function turn(phone, state) {
   }
 
   const lockdownButton = phone.button('Lockdown');
-  if (/You are the Traitor/.test(text) && await lockdownButton.count() && Math.random() < 0.02) {
+  if (await isTraitor(phone) && await lockdownButton.count() && Math.random() < 0.02) {
     await lockdownButton.click();
-    await phone.button('Tap again to lock everyone down').click();
-    say(`${phone.name} started a lockdown`);
+    const go = phone.button('Lock everyone down');
+    if (await go.count()) {
+      await go.click();
+      say(`${phone.name} started a lockdown`);
+    } else {
+      await phone.page.keyboard.press('Escape');
+    }
     return;
   }
 
-  if (/You are the Traitor/.test(text) && !/kill cooldown/i.test(text) && Math.random() < 0.05) {
-    const targets = await unpressed(phone, '.kill-list');
+  if (await isTraitor(phone) && !/Next kill in/.test(text) && Math.random() < 0.05) {
+    const targets = await unpressed(phone, '.target-grid');
     if (targets.length) {
       const target = pick(targets);
       await phone.page.getByRole('button', { name: target, exact: true }).click();
@@ -142,7 +151,7 @@ async function turn(phone, state) {
   }
 
   if (Date.now() - state.lastMeeting > 60000 && Math.random() < 0.03) {
-    const button = phone.button('🚨 Emergency Meeting');
+    const button = phone.button('Emergency Meeting');
     if (await button.count()) {
       await button.click();
       state.lastMeeting = Date.now();

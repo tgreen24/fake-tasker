@@ -62,6 +62,8 @@ export function deriveRoundState(gameData, playerName, uid, privateData) {
     roleOf: (player) => roleMap[player],
     isCreator: isHost(gameData, uid),
     isDead: killList.includes(playerName),
+    // Killed by a traitor rather than voted out. Says nothing about by whom.
+    wasKilled: !!gameData?.kills?.[playerName],
     killCooldown: gameData?.killCooldown || 30,
     killCooldownUntil: gameData?.killCooldowns?.[playerName],
     sabotageCooldownUntil: gameData?.sabotageCooldowns?.[playerName],

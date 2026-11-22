@@ -70,7 +70,7 @@ function useTypewriter(text, delayMs = 0) {
 export function useMeeting(gameCode) {
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected, pendingWrites } = useGameSync(gameCode, playerName);
-  const { privateData } = usePrivateRole(gameCode, playerName);
+  const { privateData } = usePrivateRole(gameCode, playerName, gameData?.playerUids?.[playerName]);
   useSettleOutcome(gameCode, gameData);
 
   const [selectedVote, setSelectedVote] = useState('');
@@ -193,7 +193,7 @@ export function useMeeting(gameCode) {
     state: {
       ...meeting,
       playerName,
-      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+      seatMoves: gameData?.seatMoves || {},
       selectedVote: chosenVote,
       selectedKillPlayer,
       killDialogOpen,

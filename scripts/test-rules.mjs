@@ -208,6 +208,27 @@ await check('claiming cannot rewrite the role it came with',
 await check('another player cannot take an owned seat',
   assertFails(updateDoc(doc(anotherPlayer, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief' })));
 
+// ── taking your seat back on a new phone, with no host involved ──
+await env2Seed();
+const newPhone = anotherPlayer;
+await check('a new phone cannot read a seat the game has not moved to it',
+  assertFails(getDoc(doc(newPhone, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('a player can move their seat to the phone they are on',
+  assertSucceeds(updateDoc(doc(newPhone, 'games', CODE), { 'playerUids.sam': 'uid-thief', 'seatMoves.sam': Date.now() })));
+await check('the role document can then be read there',
+  assertSucceeds(getDoc(doc(newPhone, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('following the seat cannot rewrite the role',
+  assertFails(updateDoc(doc(newPhone, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief', role: 'Imposter' })));
+await check('following the seat cannot touch the tasks',
+  assertFails(updateDoc(doc(newPhone, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief', completedTasks: ['Dishes'] })));
+await check('it can take ownership and nothing else',
+  assertSucceeds(updateDoc(doc(newPhone, 'games', CODE, 'players', PLAYER_SEAT), { uid: 'uid-thief' })));
+await check('and the old phone is shut out of it',
+  assertFails(getDoc(doc(player, 'games', CODE, 'players', PLAYER_SEAT))));
+await check('a phone cannot take the role document of a seat that was not moved to it',
+  assertFails(updateDoc(doc(newPhone, 'games', CODE, 'players', HOST_SEAT), { uid: 'uid-thief' })));
+await env2Seed();
+
 // ── leaving your own seat, which the kick guard used to reject ──
 await testEnv.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(ctx.firestore(), 'games', CODE), {

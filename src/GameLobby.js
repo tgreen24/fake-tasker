@@ -13,7 +13,7 @@ import { TASK_PACKS } from './game/taskPacks';
 import { roleNameLower, roleNamePlural } from './game/terminology';
 import LeaveGame from './components/LeaveGame';
 import ConfirmButton from './components/ConfirmButton';
-import SeatRequests from './components/SeatRequests';
+import SeatMoves from './components/SeatMoves';
 import ClaimSeat from './components/ClaimSeat';
 import { MIN_PLAYERS } from './game/lobbyState';
 
@@ -29,7 +29,7 @@ function GameLobby() {
     players, tasks, maxPlayers, playerName, isCreator,
     imposterCount, tasksPerCrewmate, killCooldown, lockdownEnabled, taskStyle, minigameRooms,
     imposterOptions, taskCountOptions, colors,
-    newTask, starting, errorMessage, activePack, seatRequests, dealtSeats, seatLost
+    newTask, starting, errorMessage, activePack, seatMoves, seatLost
   } = state;
 
   return (
@@ -47,12 +47,12 @@ function GameLobby() {
       </div>
 
       <div className="lobby-content">
-        <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
+        <SeatMoves isHost={isCreator} seatMoves={seatMoves} />
         {seatLost && (
           <ClaimSeat
             gameCode={gameCode}
             playerName={playerName}
-            message="Your seat is in use on another phone or browser, so your role would go there."
+            message="Your seat moved to another phone or browser. If that wasn't you, take it back."
           />
         )}
 

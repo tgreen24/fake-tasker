@@ -4,7 +4,7 @@ import { Phone, pause, readGame, readSeat, serve, until } from './phones.mjs';
 import {
   NAMES as ALL_NAMES, callMeeting, createGame, doTasks, enableLockdown, enterLockdownCode, join, minigameOf,
   openMinigameTask, playMinigameTask, screenProblem, seats, setTaskStyle, setUpLobby, solveLockdownPuzzle,
-  startLockdown, startRound, taskRow, vote, waitForRoundScreen
+  startLockdown, startRound, tab, taskRow, vote, waitForRoundScreen
 } from './game.mjs';
 import { makeSolvers } from './solvers.mjs';
 
@@ -211,7 +211,7 @@ const scenarios = {
       .catch(async () => missing.push(`${phone.name}: ${(await phone.text()).slice(0, 120).replace(/\s+/g, ' ')}`))));
     record('every phone shows the lockdown', missing.length === 0, missing.join(' | '));
     record('nobody can call a meeting during it',
-      (await game.byName[game.taskers[0]].button('🚨 Emergency Meeting').count()) === 0);
+      (await game.byName[game.taskers[0]].button('Emergency Meeting').count()) === 0);
     const tasker = game.byName[game.taskers[0]];
     record('taskers cannot tick off tasks during it',
       (await tasker.page.locator('.task-list').count()) === 0 && /tasks are locked/.test(await tasker.text()));
@@ -258,11 +258,13 @@ const scenarios = {
       .catch(() => record('every phone says it was lifted', false));
     const after = await readGame(game.code);
     record('the round carries on, with the lockdown cooling down', !after.gameEnded && !!after.lockdownCooldown);
-    record('the traitor sees no lockdown button while it cools down',
-      (await game.byName[game.traitor].button('Lockdown').count()) === 0);
-    await until(async () => (await game.byName[game.traitor].button('Lockdown').count()) > 0, { timeout: 12000, what: 'button back' })
-      .then(() => record('the button comes back once it is ready', true))
-      .catch(() => record('the button comes back once it is ready', false));
+    // The button itself never goes away -- it stands where a tasker's guide
+    // button does -- so "ready" is its small dot.
+    const readyDot = () => game.byName[game.traitor].page.locator('.round-dock-dot').count();
+    record('the traitor\'s Lockdown shows no ready dot while it cools down', (await readyDot()) === 0);
+    await until(async () => (await readyDot()) > 0, { timeout: 12000, what: 'ready dot' })
+      .then(() => record('the dot comes back once it is ready', true))
+      .catch(() => record('the dot comes back once it is ready', false));
     await until(async () => (await tasker.page.locator('.task-list').count()) > 0, { timeout: 6000, what: 'tasks back' })
       .then(() => record('tasks come back once it is lifted', true))
       .catch(() => record('tasks come back once it is lifted', false));
@@ -295,7 +297,7 @@ const scenarios = {
     await settled(game.phones, game.code, { timeout: 15000 });
     const [a, b] = game.traitorNames;
     const [victim, other] = game.taskers;
-    const targets = (name) => game.byName[name].page.locator('.kill-list');
+    const targets = (name) => game.byName[name].page.locator('.target-grid');
     const row = (name, who) => targets(name).getByRole('button', { name: new RegExp(`^${who}(,|$)`) });
 
     await targets(b).getByRole('button', { name: other, exact: true }).click();
@@ -303,16 +305,17 @@ const scenarios = {
     await targets(a).getByRole('button', { name: victim, exact: true }).click();
     await until(async () => ((await readGame(game.code)).killList || []).includes(victim), { what: `${a}'s kill` });
 
-    await row(b, victim).getByText(`killed by ${a}`).waitFor({ timeout: 5000 })
+    await row(b, victim).getByText(`by ${a}`, { exact: true }).waitFor({ timeout: 5000 })
       .then(() => record('a teammate sees who made the kill', true))
       .catch(() => record('a teammate sees who made the kill', false));
-    record('the killer sees it as theirs', (await row(a, victim).getByText('killed by you').count()) === 1);
+    record('the killer sees it as theirs', (await row(a, victim).getByText('by you', { exact: true }).count()) === 1);
 
     await row(b, victim).click();
     await pause(1500);
     record('one tap does not bring them back', ((await readGame(game.code)).killList || []).includes(victim));
     record('it asks for a second tap, naming who marked it',
-      (await row(b, victim).getByText(`${a} marked this. Tap again to bring ${victim} back`).count()) === 1);
+      (await row(b, victim).getAttribute('aria-label')) === `${victim}, ${a} marked this. Tap again to bring ${victim} back`
+      && (await row(b, victim).getByText(`${a}'s kill · tap again`).count()) === 1);
 
     const cooldownB = (await readGame(game.code)).killCooldowns?.[b];
     await row(b, victim).click();
@@ -337,7 +340,7 @@ const scenarios = {
     const before = await receiver.page.locator('.lockdown-entry').innerText();
     const countBefore = (await watcher.page.locator('.lockdown-count').innerText()).trim();
 
-    await game.byName[game.traitor].page.locator('.kill-list').getByRole('button', { name: pair.giver, exact: true }).click();
+    await game.byName[game.traitor].page.locator('.target-grid').getByRole('button', { name: pair.giver, exact: true }).click();
     await until(async () => ((await readGame(game.code)).killList || []).includes(pair.giver), { what: 'kill' });
     await pause(3000);
     const afterText = await receiver.page.locator('.lockdown-entry').innerText().catch(() => '(gone)');
@@ -356,9 +359,11 @@ const scenarios = {
     await playMinigameTask(game.byName[first], hand[0], solvers);
     const afterOne = (await readGame(game.code)).tasksCompleted;
     record('winning a minigame counts the task', afterOne === 1, `total ${afterOne}`);
+    await tab(game.byName[first], 'Done').click();
     await taskRow(game.byName[first], hand[0]).click();
     await pause(1500);
     record('a won minigame cannot be unticked', (await readGame(game.code)).tasksCompleted === 1);
+    await tab(game.byName[first], 'To do').click();
     for (const name of game.taskers) {
       for (const task of game.dealt[name].tasks) {
         if (name === first && task === hand[0]) continue;
@@ -379,10 +384,13 @@ const scenarios = {
     const cover = game.dealt[game.traitor].fakeTasks;
     record('the traitor was dealt a mixed cover list', cover.length === 2 && cover.filter(minigameOf).length === 1,
       cover.join(' | '));
-    record('the traitor starts on the targets screen', (await traitor.page.getByText('Targets').count()) > 0);
-    await traitor.button('Switch').click();
-    record('Switch shows a task list instead', (await traitor.page.getByText('Your Tasks').count()) > 0
-      && (await traitor.page.locator('.kill-list').count()) === 0);
+    await traitor.page.locator('.target-grid').waitFor({ timeout: 8000 })
+      .then(async () => record('the traitor starts on the targets screen',
+        (await traitor.page.getByRole('tab', { name: /^Targets ·/, selected: true }).count()) === 1))
+      .catch(() => record('the traitor starts on the targets screen', false));
+    await tab(traitor, 'Tasks').click();
+    record('the Tasks tab shows a task list instead', (await traitor.page.locator('.task-list').count()) > 0
+      && (await traitor.page.locator('.target-grid').count()) === 0);
     const chore = cover.find((task) => !minigameOf(task));
     await taskRow(traitor, chore).click();
     await playMinigameTask(traitor, cover.find(minigameOf), solvers);
@@ -392,10 +400,10 @@ const scenarios = {
     record('the cover tasks are saved as done', (seat.fakeCompleted || []).length === 2, (seat.fakeCompleted || []).join(' | '));
     record('and the progress bar never moved', tasksCompleted === 0, `total ${tasksCompleted}`);
     await traitor.reload();
-    await traitor.button('Switch').click({ timeout: 15000 });
-    record('they are still done after a reload', (await traitor.page.locator('.task-item.selected').count()) === 2);
-    await traitor.button('Switch').click();
-    record('Switch goes back to the targets', (await traitor.page.locator('.kill-list').count()) === 1);
+    await tab(traitor, 'Tasks').click({ timeout: 15000 });
+    record('they are still done after a reload', (await traitor.page.locator('.task-row.done').count()) === 2);
+    await tab(traitor, 'Targets').click();
+    record('the Targets tab goes back to the targets', (await traitor.page.locator('.target-grid').count()) === 1);
     return game.phones;
   },
 
@@ -533,7 +541,7 @@ const scenarios = {
     await until(async () => Object.keys((await readGame(game.code)).votes || {}).length >= 2, { what: 'votes' });
     await pause(1500);
     await stale.wake();
-    await stale.button('🚨 Emergency Meeting').click({ timeout: 500 }).catch(() => {});
+    await stale.button('Emergency Meeting').click({ timeout: 500 }).catch(() => {});
     await pause(2500);
     const after = await readGame(game.code);
     record('votes already cast survive', Object.keys(after.votes || {}).length >= 2, `${Object.keys(after.votes || {}).length} votes`);
@@ -565,10 +573,10 @@ const scenarios = {
     await fresh.page.locator('.join-input').fill(name);
     await fresh.button('Join Game').click();
     await fresh.button(`That's me — take ${name}'s seat`).click({ timeout: 8000 });
-    await game.host.button(`Let ${name} back in`).click({ timeout: 8000 })
-      .then(() => record('the host is asked to let them back in', true))
-      .catch(() => record('the host is asked to let them back in', false));
-    await recovers(fresh, game.code, `${name} sees their role in the new browser`);
+    await recovers(fresh, game.code, `${name} is straight back in, with no host needed`);
+    await game.host.page.getByText(`${name} rejoined on a new phone or browser`).waitFor({ timeout: 8000 })
+      .then(() => record('the host sees a note that they rejoined', true))
+      .catch(() => record('the host sees a note that they rejoined', false));
     const task = game.dealt[name].tasks[0];
     await fresh.page.getByRole('button', { name: task, exact: true }).click({ timeout: 5000 }).catch(() => {});
     await until(async () => ((await readSeat(game.code, name)).completedTasks || []).includes(task), { timeout: 8000, what: 'task' })
@@ -577,7 +585,7 @@ const scenarios = {
     return game.phones;
   },
 
-  async 'the old browser cannot take the seat back'(browser) {
+  async 'the old browser is told its seat moved'(browser) {
     const game = await freshRound(browser);
     await settled(game.phones, game.code, { timeout: 15000 });
     const name = game.taskers[2];
@@ -587,13 +595,14 @@ const scenarios = {
     await fresh.page.locator('.join-input').fill(name);
     await fresh.button('Join Game').click();
     await fresh.button(`That's me — take ${name}'s seat`).click({ timeout: 8000 });
-    await game.host.button(`Let ${name} back in`).click({ timeout: 8000 });
     await recovers(fresh, game.code, `${name} plays from the new browser`);
-    const handedTo = (await readGame(game.code)).playerUids[name];
+    const movedTo = (await readGame(game.code)).playerUids[name];
+    await until(async () => /seat moved to another phone/.test(await old.text()), { timeout: 8000, what: 'moved notice' })
+      .then(({ ms }) => record('the old tab says the seat moved, without a reload', true, `${ms}ms`))
+      .catch(async () => record('the old tab says the seat moved, without a reload', false, (await old.text()).slice(0, 80)));
     await old.reload();
     await pause(5000);
-    record('the old tab leaves the seat where the host put it', (await readGame(game.code)).playerUids[name] === handedTo);
-    record('the old tab offers to ask for it instead', /in use on another phone/.test(await old.text()));
+    record('reloading the old tab does not quietly take it back', (await readGame(game.code)).playerUids[name] === movedTo);
     record('the new browser still has its role', !(await screenProblem(fresh, game.code)));
     await fresh.close();
     return game.phones;
@@ -670,7 +679,6 @@ const scenarios = {
     await claim.click({ timeout: 5000 })
       .then(() => record('the lobby offers the old seat back', true))
       .catch(() => record('the lobby offers the old seat back', false));
-    await host.button(`Let ${name} back in`).click({ timeout: 8000 }).catch(() => {});
     await fresh.page.waitForURL(/\/lobby\//, { timeout: 8000 }).catch(() => {});
     const game = await readGame(code);
     record('no ghost seat is left behind', game.players.length === 6, `${game.players.length} seats`);
@@ -683,19 +691,26 @@ const scenarios = {
     const game = await freshRound(browser);
     await settled(game.phones, game.code, { timeout: 15000 });
     const victim = game.traitor;
+    const real = game.byName[victim];
     const spy = await new Phone(browser, victim).open();
     await spy.goto(`/j/${game.code}`);
     await spy.page.locator('.join-input').fill(victim);
     await spy.button('Join Game').click();
     await spy.button(`That's me — take ${victim}'s seat`).click({ timeout: 8000 });
-    await game.host.button('Not them').click({ timeout: 8000 });
-    await until(async () => /did not let you in/.test(await spy.text()), { timeout: 8000, what: 'refusal' })
-      .then(() => record('the spare phone is told no', true))
-      .catch(() => record('the spare phone is told no', false));
-    record('the spare phone never reaches the round', !spy.path().startsWith('/countdown'));
+    await until(async () => /seat moved to another phone/.test(await real.text()), { timeout: 8000, what: 'moved notice' })
+      .then(() => record('the real player\'s phone says their seat moved', true))
+      .catch(() => record('the real player\'s phone says their seat moved', false));
+    await game.host.page.getByText(`${victim} rejoined on a new phone or browser`).waitFor({ timeout: 8000 })
+      .then(() => record('the host sees it happen', true))
+      .catch(() => record('the host sees it happen', false));
+    await real.button(`That's me — take ${victim}'s seat`).click({ timeout: 8000 });
+    await recovers(real, game.code, 'the real player takes it straight back');
     const seat = await readSeat(game.code, victim);
-    record('the real player keeps their seat', seat.uid !== null && (await readGame(game.code)).playerUids[victim] === seat.uid);
-    await settled(game.phones, game.code, { timeout: 5000, label: 'the real players are undisturbed' });
+    record('and holds both the seat and its role', (await readGame(game.code)).playerUids[victim] === seat.uid && seat.role === 'Imposter');
+    await until(async () => /seat moved to another phone/.test(await spy.text()), { timeout: 8000, what: 'spy bumped' })
+      .then(() => record('the spare phone is bumped off', true))
+      .catch(() => record('the spare phone is bumped off', false));
+    await settled(game.phones, game.code, { timeout: 8000, label: 'everyone else is undisturbed' });
     await spy.close();
     return game.phones;
   },

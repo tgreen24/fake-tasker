@@ -117,12 +117,26 @@ service cloud.firestore {
             && request.resource.data.role == resource.data.role
             && request.resource.data.tasks == resource.data.tasks;
         }
+        // A player back on a new phone or browser takes their seat without
+        // the host: the game records the move first, and the role document
+        // then follows it. Only the owner changes -- never the role or tasks.
+        // Anyone can move a seat this way; what stops it going unnoticed is
+        // the app, which tells the phone that lost it and the host.
+        function seatMovedHere() {
+          return game().get('playerUids', {}).get(playerName, null) == request.auth.uid;
+        }
+        function followsMovedSeat() {
+          return resource != null
+            && seatMovedHere()
+            && request.resource.data.get('uid', null) == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']);
+        }
 
-        allow get: if signedIn() && (ownsSeat() || seatIsUnclaimed());
+        allow get: if signedIn() && (ownsSeat() || seatIsUnclaimed() || seatMovedHere());
         allow list: if false;
 
         allow create: if signedIn() && isGameHost();
-        allow update: if signedIn() && (ownsSeat() || isGameHost() || claimsSeat());
+        allow update: if signedIn() && (ownsSeat() || isGameHost() || claimsSeat() || followsMovedSeat());
         allow delete: if signedIn() && isGameHost();
       }
     }

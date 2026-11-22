@@ -81,28 +81,33 @@ export async function claimSeat(gameCode, playerName) {
   }
 }
 
-// A player back on a different browser is a different account, and their seat
-// -- including the private role document -- belongs to the old one. Only the
-// host can hand it over, so typing somebody else's name on a spare phone does
-// not get you their role.
-export const requestSeat = (gameCode, playerName) =>
-  updateGame(gameCode, { [`seatRequests.${playerName}`]: auth.currentUser?.uid || null });
-
-export const dismissSeatRequest = (gameCode, playerName) =>
-  updateGame(gameCode, { [`seatRequests.${playerName}`]: deleteField() });
-
-export async function grantSeat(gameCode, playerName, uid, { dealt = false } = {}) {
+// A player back on a different phone or browser is a different account, and
+// their seat -- including the private role document -- belongs to the old
+// one. Taking it back is immediate: the game's record of who holds the seat
+// moves first, which is what lets the rules hand over the role document, and
+// then that document follows. The move is stamped so the host sees a passing
+// note, and a phone that loses its seat this way says so and can take it back,
+// so a seat is never taken without somebody noticing.
+export async function takeSeat(gameCode, playerName) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return false;
   try {
-    const batch = writeBatch(db);
-    batch.update(gameRef(gameCode), {
-      [`playerUids.${playerName}`]: uid,
-      [`seatRequests.${playerName}`]: deleteField()
+    const dealt = await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(gameRef(gameCode));
+      if (!snapshot.exists()) return null;
+      const data = snapshot.data();
+      if (!(data.players || []).includes(playerName)) return null;
+      tx.update(gameRef(gameCode), {
+        [`playerUids.${playerName}`]: uid,
+        [`seatMoves.${playerName}`]: Date.now()
+      });
+      return (data.dealtSeats || []).includes(playerName);
     });
-    if (dealt) batch.update(playerRef(gameCode, playerName), { uid });
-    await batch.commit();
+    if (dealt === null) return false;
+    if (dealt) await updateDoc(playerRef(gameCode, playerName), { uid });
     return true;
   } catch (error) {
-    console.warn('[seat] could not hand the seat over', error);
+    console.warn('[seat] could not take the seat', error);
     return false;
   }
 }
@@ -259,7 +264,8 @@ function dealRound(tx, gameCode, { roles, assignedTasks, fakeTasks = {}, imposte
     leftBy: deleteField(),
     winner: deleteField(),
     winReason: deleteField(),
-    seatRequests: deleteField()
+    seatRequests: deleteField(),
+    seatMoves: deleteField()
   });
 }
 

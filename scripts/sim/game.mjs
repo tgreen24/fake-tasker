@@ -34,13 +34,26 @@ export async function enableLockdown(host, code) {
   await until(async () => (await readGame(code)).lockdownEnabled, { what: 'lockdown on' });
 }
 
+// The Lockdown button is always there for a traitor when it is switched on;
+// it only asks to go ahead once the cooldown is over.
 export async function startLockdown(traitor, code) {
-  const button = traitor.button('Lockdown');
-  await until(async () => (await button.count()) > 0, { what: 'lockdown ready', timeout: 20000 });
-  await button.click();
-  await traitor.button('Tap again to lock everyone down').click();
+  await until(async () => {
+    await traitor.button('Lockdown').click({ timeout: 5000 });
+    const go = traitor.button('Lock everyone down');
+    if (await go.count()) {
+      await go.click();
+      return true;
+    }
+    await traitor.page.keyboard.press('Escape');
+    await pause(500);
+    return false;
+  }, { what: 'lockdown ready', timeout: 20000 });
   await until(async () => !!(await readGame(code)).lockdown, { what: 'lockdown to start' });
 }
+
+// The round screen never shows a role after the reveal, so a phone's role is
+// read off the shape of its screen, the way a person glancing at it could not.
+export const tab = (phone, name) => phone.page.getByRole('tab', { name: new RegExp(`^${name} ·`) });
 
 export async function solveLockdownPuzzle(phone) {
   for (let n = 1; n <= 9; n++) {
@@ -74,19 +87,19 @@ export async function screenProblem(phone, code) {
   const text = await phone.text();
   if (/Loading…/.test(text) && text.length < 40) return 'stuck on Loading…';
   if (/Your role has not arrived/.test(text)) return 'role has not arrived';
-  if (want.startsWith('/countdown') && !/You are|Assigning roles|Meeting adjourned/.test(text)) {
+  if (want.startsWith('/countdown') && !/Hold for role|You are|Assigning roles|Meeting adjourned/.test(text)) {
     return 'round screen without a role';
   }
   return null;
 }
 
 export async function waitForRoundScreen(phone) {
-  await phone.button('🚨 Emergency Meeting').waitFor({ timeout: 20000 });
+  await phone.button('Emergency Meeting').waitFor({ timeout: 20000 });
 }
 
 export async function callMeeting(phone, code) {
   await waitForRoundScreen(phone);
-  await phone.button('🚨 Emergency Meeting').click();
+  await phone.button('Emergency Meeting').click();
   await until(async () => (await readGame(code)).meetingCalled, { what: 'meeting to open' });
 }
 

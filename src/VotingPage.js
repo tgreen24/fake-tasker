@@ -1,6 +1,7 @@
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useMeeting } from './hooks/useMeeting';
+import { useScrollLock } from './hooks/useScrollLock';
 import ConnectionBanner from './components/ConnectionBanner';
 import LoadingScreen from './components/LoadingScreen';
 import PlayerAvatar from './components/PlayerAvatar';
@@ -8,7 +9,7 @@ import Selectable from './components/Selectable';
 import TimerBar from './components/TimerBar';
 import ScreenHeader from './components/ScreenHeader';
 import TypedVerdict from './components/TypedVerdict';
-import SeatRequests from './components/SeatRequests';
+import SeatMoves from './components/SeatMoves';
 import { EXILED } from './game/terminology';
 import { roleName, roleNameLower } from './game/terminology';
 
@@ -37,7 +38,9 @@ function DeadPlayersList({ deadPlayers, colors }) {
 // only have gone out to this vote, so there is nothing of theirs left to
 // correct.
 function MarkDeadAction({ role, isAlive, open, targets, selected, actions }) {
-  if (role !== 'Imposter' || !isAlive) return null;
+  const shown = role === 'Imposter' && isAlive;
+  useScrollLock(shown && open);
+  if (!shown) return null;
 
   return (
     <>
@@ -96,7 +99,7 @@ function VotingPage() {
     myVote, voidedVote, votesCast, pendingVoters, alivePlayers, ballot, deadPlayers, secondsLeft,
     selectedVote, selectedKillPlayer, killDialogOpen, killTargets,
     colors, voteTotalSeconds, ejected, ejectedWasImposter,
-    displayedVerdict, verdictText, verdictComplete, seatRequests, dealtSeats, voteSending
+    displayedVerdict, verdictText, verdictComplete, seatMoves, voteSending
   } = state;
 
   // Naming who is outstanding rather than counting them. A bare 3/4 is
@@ -120,7 +123,7 @@ function VotingPage() {
           tone="danger"
           icon="🚨"
         />
-        <SeatRequests gameCode={gameCode} isHost={isCreator} requests={seatRequests} dealtSeats={dealtSeats} />
+        <SeatMoves isHost={isCreator} seatMoves={seatMoves} />
         {!votingEnded && !myVote && isAlive && voteTimer}
 
         {votingEnded ? (

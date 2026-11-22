@@ -17,10 +17,19 @@ const RESYNC_TIMEOUT_MS = 6000;
 // a round screen with no role renders as neither a tasker nor a traitor -- a
 // player staring at an empty screen -- so a listener that never delivers here
 // is worse than one that never delivers the shared document.
-export function usePrivateRole(gameCode, playerName) {
+//
+// seatHolder is the account the game says holds this seat. While another
+// account holds it this phone has no role, so the screen offers the seat back
+// instead of a round it can no longer play; when it moves here the listener
+// starts over at once, rather than waiting out the backoff of one that was
+// being refused.
+export function usePrivateRole(gameCode, playerName, seatHolder) {
   const [privateData, setPrivateData] = useState(null);
   const [loading, setLoading] = useState(true);
   const receivedRef = useRef(false);
+  const restartRef = useRef(() => {});
+  const holderRef = useRef(seatHolder);
+  holderRef.current = seatHolder;
 
   useEffect(() => {
     if (!gameCode || !playerName) {
@@ -52,8 +61,13 @@ export function usePrivateRole(gameCode, playerName) {
       setLoading(false);
 
       // Deal-time race: the host had not seen this account announced, so the
-      // seat came out unowned. Take it, or nothing here will ever save.
-      if (data && !data.uid && currentUid()) {
+      // seat came out unowned. Or this phone took the seat back and lost the
+      // connection before the role document followed. Either way, take it,
+      // or nothing here will ever save.
+      const uid = currentUid();
+      const unowned = data && !data.uid;
+      const movedHereOnly = data && data.uid !== uid && holderRef.current === uid;
+      if (uid && (unowned || movedHereOnly)) {
         claimOwnSeat(gameCode, playerName);
       }
     };
@@ -123,6 +137,11 @@ export function usePrivateRole(gameCode, playerName) {
       resync();
     };
 
+    restartRef.current = () => {
+      subscribe();
+      resync();
+    };
+
     subscribe();
     const timer = setInterval(tick, TICK_MS);
     document.addEventListener('visibilitychange', onForeground);
@@ -135,8 +154,21 @@ export function usePrivateRole(gameCode, playerName) {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onForeground);
       window.removeEventListener('pageshow', onForeground);
+      restartRef.current = () => {};
     };
   }, [gameCode, playerName]);
 
-  return { privateData, roleLoading: loading };
+  // Only a move back to this account restarts: the holder going from unknown
+  // to known is just the game loading, and restarting then would cost a read.
+  const lastHolder = useRef(seatHolder);
+  useEffect(() => {
+    const previous = lastHolder.current;
+    lastHolder.current = seatHolder;
+    if (previous && seatHolder && previous !== seatHolder && seatHolder === currentUid()) restartRef.current();
+  }, [seatHolder]);
+
+  // Decided here rather than by clearing state: the cache would hand the old
+  // role straight back the moment the listener restarted.
+  const heldElsewhere = !!seatHolder && seatHolder !== currentUid();
+  return { privateData: heldElsewhere ? null : privateData, roleLoading: loading };
 }

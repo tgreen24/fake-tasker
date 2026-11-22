@@ -79,6 +79,7 @@ export function useLockdown(gameCode, gameData, playerName, privateData) {
       secondsLeft,
       secondsTotal: LOCKDOWN_SECONDS,
       part,
+      cooldownLeft,
       canStart,
       justLifted: liftedNotice
     },

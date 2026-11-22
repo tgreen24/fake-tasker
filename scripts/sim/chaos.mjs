@@ -210,6 +210,7 @@ for (let round = 1; round <= ROUNDS; round++) {
     await pause(4000);
     await host.button('End Game and Return to Lobby').click({ timeout: 10000 }).catch(() => {});
   } else {
+    await host.button('Menu').click({ timeout: 3000 }).catch(() => {});
     await host.button('End Game Round').click({ timeout: 3000 }).catch(() => {});
     await host.button('Tap again to end the round').click({ timeout: 3000 }).catch(() => {});
   }

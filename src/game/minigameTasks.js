@@ -25,10 +25,11 @@ export function parseMinigameTask(task) {
 
 export const isMinigameTask = (task) => !!parseMinigameTask(task);
 
-// What a task says on screen.
+// What a task is called, in plain text: an emoji per game is a splash of
+// color somebody could read across the room.
 export function taskLabel(task) {
   const minigame = parseMinigameTask(task);
-  return minigame ? `${minigame.icon} ${minigame.room}: ${minigame.name}` : task;
+  return minigame ? `${minigame.room}: ${minigame.name}` : task;
 }
 
 export const normalizeStyle = (style) => (TASK_STYLES.includes(style) ? style : DEFAULT_TASK_STYLE);

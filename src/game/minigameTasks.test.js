@@ -23,7 +23,7 @@ test('every minigame in the catalog can be played', () => {
 test('a minigame task survives being stored as text, and a physical task is left alone', () => {
   const task = minigameTask('match-socks', 'Bedroom 2');
   expect(parseMinigameTask(task)).toMatchObject({ gameId: 'match-socks', room: 'Bedroom 2', name: 'Match the Socks' });
-  expect(taskLabel(task)).toBe('🧦 Bedroom 2: Match the Socks');
+  expect(taskLabel(task)).toBe('Bedroom 2: Match the Socks');
   expect(isMinigameTask('Count the forks in the silverware drawer')).toBe(false);
   expect(taskLabel('Count the forks')).toBe('Count the forks');
   expect(parseMinigameTask('minigame:no-such-game@Kitchen')).toBeNull();

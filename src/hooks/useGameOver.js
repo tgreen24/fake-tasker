@@ -13,7 +13,7 @@ export function useGameOver(gameCode) {
   const navigate = useNavigate();
   const playerName = usePlayerName(gameCode);
   const { gameData, loading, connected } = useGameSync(gameCode, playerName);
-  const { privateData } = usePrivateRole(gameCode, playerName);
+  const { privateData } = usePrivateRole(gameCode, playerName, gameData?.playerUids?.[playerName]);
   usePublishOwnRole(
     gameCode, gameData, playerName, privateData?.role, privateData?.completedTasks?.length
   );
@@ -58,7 +58,7 @@ export function useGameOver(gameCode) {
   return {
     state: {
       ...summary, playerName, errorMessage,
-      seatRequests: gameData?.seatRequests || {}, dealtSeats: gameData?.dealtSeats || [],
+      seatMoves: gameData?.seatMoves || {},
     },
     actions: { endGameAndReturnToLobby, leaveGame },
     loading,

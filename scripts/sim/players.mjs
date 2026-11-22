@@ -1,5 +1,5 @@
 import { pause, readGame, readSeat } from './phones.mjs';
-import { enterLockdownCode, minigameOf, playMinigameTask, solveLockdownPuzzle, taskRow, vote } from './game.mjs';
+import { enterLockdownCode, minigameOf, playMinigameTask, solveLockdownPuzzle, tab, taskRow, vote } from './game.mjs';
 import { makeSolvers } from './solvers.mjs';
 
 const solvers = makeSolvers();
@@ -71,22 +71,27 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
       }
     } else if (seat.role === 'Imposter') {
       const targets = alive.filter((name) => name !== me && (seat.roleMap || {})[name] !== 'Imposter');
-      const cooling = /kill cooldown/i.test(await phone.text());
+      const cooling = /Next kill in/.test(await phone.text());
       // Now and then a traitor flips to their cover list and does a chore.
       const cover = (seat.fakeTasks || []).filter((task) => !minigameOf(task) && !(seat.fakeCompleted || []).includes(task));
       if (cover.length && Math.random() < 0.05) {
-        await phone.button('Switch').click({ timeout: 1500 });
+        await tab(phone, 'Tasks').click({ timeout: 1500 });
         await taskRow(phone, pick(cover)).click({ timeout: 1500 });
         await pause(between(1000, 3000));
-        await phone.button('Switch').click({ timeout: 1500 });
+        await tab(phone, 'Targets').click({ timeout: 1500 });
         log(`${me} faked a task`);
         return;
       }
       const lockdownButton = phone.button('Lockdown');
       if (await lockdownButton.count() && Math.random() < 0.04) {
         await lockdownButton.click({ timeout: 1500 });
-        await phone.button('Tap again to lock everyone down').click({ timeout: 1500 });
-        log(`${me} started a lockdown`);
+        const go = phone.button('Lock everyone down');
+        if (await go.count()) {
+          await go.click({ timeout: 1500 });
+          log(`${me} started a lockdown`);
+        } else {
+          await phone.page.keyboard.press('Escape');
+        }
         return;
       }
       if (targets.length && !cooling && Math.random() < 0.08) {
@@ -98,7 +103,7 @@ export function playLikeAPerson(phone, code, { stop, log = () => {}, meetingEver
     }
 
     if (Date.now() - lastMeetingCall > meetingEveryMs && Math.random() < 0.15) {
-      await phone.button('🚨 Emergency Meeting').click({ timeout: 1500 });
+      await phone.button('Emergency Meeting').click({ timeout: 1500 });
       lastMeetingCall = Date.now();
       log(`${me} called a meeting`);
     }
