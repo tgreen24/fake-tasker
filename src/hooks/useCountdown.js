@@ -4,7 +4,7 @@ import {
   recordKill, startSabotage, toggleTaskCompletion, undoKill
 } from '../game/mutations';
 import { useSettleOutcome } from './useSettleOutcome';
-import { deriveRoundState, toggledTaskList } from '../game/roundState';
+import { deriveRoundState, targetTap, toggledTaskList } from '../game/roundState';
 import { currentUid } from '../firebase';
 import { SABOTAGE_COOLDOWN_SECONDS, isTicking, remainingCooldownSeconds } from '../game/cooldown';
 import { useNow } from './useNow';
@@ -18,6 +18,7 @@ import { isMinigameTask } from '../game/minigameTasks';
 import { withTimeout } from '../withTimeout';
 
 const TASK_WAIT_MS = 10000;
+const BRING_BACK_WINDOW_MS = 4000;
 
 const OPENING_COUNTDOWN_SECONDS = 3;
 const REVEAL_HOLD_MS = 3800;
@@ -42,6 +43,8 @@ export function useCountdown(gameCode) {
   const [countdown, setCountdown] = useState(null);
   const [sabotageDialogOpen, setSabotageDialogOpen] = useState(false);
   const [blended, setBlended] = useState(false);
+  // The dead target waiting on a second tap to be brought back.
+  const [armedTarget, setArmedTarget] = useState(null);
   // A tap that has not come back yet. Completing is a toggle decided from the
   // server, so a second tap on the same task while the first is still in the
   // air reads as "undo" -- and tapping again to make sure it registered is
@@ -181,8 +184,17 @@ export function useCountdown(gameCode) {
     },
 
     toggleKill: async (crewmate) => {
-      if (round.killList.includes(crewmate)) {
-        await undoKill(gameCode, crewmate, playerName);
+      const target = round.targets.find((entry) => entry.name === crewmate);
+      if (!target) return;
+      const tap = targetTap(target, armedTarget);
+      if (tap === 'none') return;
+      if (tap === 'arm') {
+        setArmedTarget(crewmate);
+        return;
+      }
+      setArmedTarget(null);
+      if (tap === 'bring-back') {
+        await undoKill(gameCode, crewmate, round.killerOf(crewmate));
         return;
       }
       if (killCooldownLeft > 0) return;
@@ -220,8 +232,14 @@ export function useCountdown(gameCode) {
     cover, tasksStopped,
     lockdown.state.active,
     gameCode, playerName, round, completedTasks,
-    killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt
+    killCooldownLeft, sabotageCooldownLeft, gameData?.finishedAt, armedTarget
   ]);
+
+  useEffect(() => {
+    if (!armedTarget) return undefined;
+    const timer = setTimeout(() => setArmedTarget(null), BRING_BACK_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, [armedTarget]);
 
   // A won minigame, counted as a real task or as cover depending on which
   // list it was opened from. Resolves whether the win was saved.
@@ -240,7 +258,7 @@ export function useCountdown(gameCode) {
       showIntro,
       introKind,
       countdown: countdown === null ? OPENING_COUNTDOWN_SECONDS : countdown,
-      killCooldownLeft, sabotageCooldownLeft,
+      killCooldownLeft, sabotageCooldownLeft, armedTarget,
       sabotageCooldownTotal: SABOTAGE_COOLDOWN_SECONDS,
       sabotageDialogOpen,
       blended,

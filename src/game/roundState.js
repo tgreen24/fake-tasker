@@ -14,6 +14,29 @@ export function awaitingRevealOf(gameData) {
   return Array.from(new Set(gameData?.killList || [])).filter((name) => !revealed[name]);
 }
 
+// How each target on a traitor's list went out, since the list is shared by
+// every traitor: a teammate's kill otherwise looks like a tick anybody may
+// clear. A vote is not a traitor's to undo; a kill is, after a second tap.
+export function targetsFor(crewmates, gameData, playerName) {
+  const killList = gameData?.killList || [];
+  const kills = gameData?.kills || {};
+  const votedOut = new Set((gameData?.voteLog || []).map((entry) => entry?.exiled).filter(Boolean));
+  return crewmates.map((name) => {
+    if (!killList.includes(name)) return { name, out: null };
+    if (kills[name]) return { name, out: kills[name] === playerName ? 'killed-by-you' : 'killed-by-teammate', killer: kills[name] };
+    if (votedOut.has(name)) return { name, out: 'voted-out' };
+    return { name, out: 'dead' };
+  });
+}
+
+// What a tap on a target does. Bringing somebody back takes two taps, the
+// first only arming it.
+export function targetTap(target, armed) {
+  if (!target.out) return 'kill';
+  if (target.out === 'voted-out') return 'none';
+  return armed === target.name ? 'bring-back' : 'arm';
+}
+
 export function deriveRoundState(gameData, playerName, uid, privateData) {
   const killList = gameData?.killList || [];
   const sabotages = gameData?.sabotages || {};
@@ -44,6 +67,8 @@ export function deriveRoundState(gameData, playerName, uid, privateData) {
     sabotageCooldownUntil: gameData?.sabotageCooldowns?.[playerName],
     killList,
     crewmates,
+    targets: targetsFor(crewmates, gameData, playerName),
+    killerOf: (player) => gameData?.kills?.[player],
     fellowImposters: playersWithRole(roleMap, IMPOSTER).filter((player) => player !== playerName),
     tasks: privateData?.tasks || [],
     completedTasks: privateData?.completedTasks || [],

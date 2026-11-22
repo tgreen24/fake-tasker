@@ -329,12 +329,14 @@ export const recordKill = (gameCode, crewmate, playerName, cooldownSeconds, vict
     ejected: deleteField()
   });
 
-export const undoKill = (gameCode, crewmate, playerName) =>
+// The cooldown given back is the killer's, whoever taps it: a teammate
+// correcting somebody else's kill must not reset their own.
+export const undoKill = (gameCode, crewmate, killerName) =>
   updateGame(gameCode, {
     killList: arrayRemove(crewmate),
     [`revealed.${crewmate}`]: deleteField(),
     [`kills.${crewmate}`]: deleteField(),
-    [`killCooldowns.${playerName}`]: deleteField()
+    ...(killerName ? { [`killCooldowns.${killerName}`]: deleteField() } : {})
   });
 
 // Published by the player themselves once they are out, since being out makes

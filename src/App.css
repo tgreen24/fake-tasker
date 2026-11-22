@@ -693,7 +693,10 @@ ul { list-style: none; margin: 0; padding: 0; }
 
 .dialog {
   width: 100%;
-  max-width: 380px;
+  max-width: 420px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   background: var(--surface);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
@@ -705,6 +708,17 @@ ul { list-style: none; margin: 0; padding: 0; }
 }
 
 .dialog h3 { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 1rem; margin: 0; }
+
+/* A long player list scrolls inside the dialog, with the heading and buttons
+   always on screen. */
+.dialog > * { flex-shrink: 0; }
+.dialog > ul {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* ── game over ─────────────────────────────────────────────── */
 
@@ -1232,6 +1246,11 @@ ul { list-style: none; margin: 0; padding: 0; }
   border-color: rgba(46, 204, 113, .4);
   background: var(--success-soft);
 }
+
+.target-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.target-note { font-size: .75rem; color: var(--text-faint); }
+.kill-list .target-row.armed { border-color: rgba(245, 179, 1, .5); }
+.target-row.armed .target-note { color: var(--warn); font-weight: 600; }
 
 .kill-list .task-item.selected::after {
   border-color: var(--success);

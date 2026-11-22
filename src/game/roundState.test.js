@@ -1,4 +1,4 @@
-import { awaitingRevealOf, deriveRoundState, toggledTaskList } from './roundState';
+import { awaitingRevealOf, deriveRoundState, targetTap, targetsFor, toggledTaskList } from './roundState';
 
 const HOST_UID = 'uid-tyler';
 const ROLES = { tyler: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' };
@@ -129,5 +129,40 @@ describe('awaitingRevealOf', () => {
   test('names nobody once every role is in, and counts a doubled name once', () => {
     expect(awaitingRevealOf({ killList: ['sam', 'sam'], revealed: { sam: 'Crewmate' } })).toEqual([]);
     expect(awaitingRevealOf({ killList: ['kai', 'kai'] })).toEqual(['kai']);
+  });
+});
+
+describe('a traitor\'s shared target list', () => {
+  const shared = game({
+    players: ['tyler', 'maya', 'sam', 'kai', 'ava', 'eli'],
+    killList: ['sam', 'kai', 'ava', 'eli'],
+    kills: { sam: 'tyler', kai: 'maya' },
+    voteLog: [{ caller: 'sam', votes: {}, exiled: null }, { caller: 'kai', votes: {}, exiled: 'ava' }]
+  });
+
+  test('says who made each kill, and who went out to a vote', () => {
+    expect(targetsFor(['sam', 'kai', 'ava', 'eli', 'zed'], shared, 'tyler')).toEqual([
+      { name: 'sam', out: 'killed-by-you', killer: 'tyler' },
+      { name: 'kai', out: 'killed-by-teammate', killer: 'maya' },
+      { name: 'ava', out: 'voted-out' },
+      { name: 'eli', out: 'dead' },
+      { name: 'zed', out: null }
+    ]);
+  });
+
+  test('bringing somebody back takes a second tap, and a vote cannot be undone', () => {
+    const [mine, teammates, voted] = targetsFor(['sam', 'kai', 'ava'], shared, 'tyler');
+    expect(targetTap({ name: 'zed', out: null }, null)).toBe('kill');
+    expect(targetTap(teammates, null)).toBe('arm');
+    expect(targetTap(teammates, 'sam')).toBe('arm');
+    expect(targetTap(teammates, 'kai')).toBe('bring-back');
+    expect(targetTap(mine, 'sam')).toBe('bring-back');
+    expect(targetTap(voted, 'ava')).toBe('none');
+  });
+
+  test('is read straight off the round', () => {
+    const s = deriveRoundState(shared, 'tyler', HOST_UID, traitorDoc({ roleMap: { tyler: 'Imposter', maya: 'Imposter', sam: 'Crewmate', kai: 'Crewmate' } }));
+    expect(s.targets.map((t) => t.out)).toEqual(['killed-by-teammate', 'killed-by-you']);
+    expect(s.killerOf('kai')).toBe('maya');
   });
 });

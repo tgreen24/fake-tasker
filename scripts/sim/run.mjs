@@ -289,6 +289,42 @@ const scenarios = {
     return game.phones;
   },
 
+  async 'traitors see who made each kill, and bringing someone back takes two taps'(browser) {
+    // Enough players that two kills still leave the taskers ahead.
+    const game = await freshRound(browser, { traitors: 2, names: ALL_NAMES.slice(0, 8) });
+    await settled(game.phones, game.code, { timeout: 15000 });
+    const [a, b] = game.traitorNames;
+    const [victim, other] = game.taskers;
+    const targets = (name) => game.byName[name].page.locator('.kill-list');
+    const row = (name, who) => targets(name).getByRole('button', { name: new RegExp(`^${who}(,|$)`) });
+
+    await targets(b).getByRole('button', { name: other, exact: true }).click();
+    await until(async () => ((await readGame(game.code)).killList || []).includes(other), { what: `${b}'s kill` });
+    await targets(a).getByRole('button', { name: victim, exact: true }).click();
+    await until(async () => ((await readGame(game.code)).killList || []).includes(victim), { what: `${a}'s kill` });
+
+    await row(b, victim).getByText(`killed by ${a}`).waitFor({ timeout: 5000 })
+      .then(() => record('a teammate sees who made the kill', true))
+      .catch(() => record('a teammate sees who made the kill', false));
+    record('the killer sees it as theirs', (await row(a, victim).getByText('killed by you').count()) === 1);
+
+    await row(b, victim).click();
+    await pause(1500);
+    record('one tap does not bring them back', ((await readGame(game.code)).killList || []).includes(victim));
+    record('it asks for a second tap, naming who marked it',
+      (await row(b, victim).getByText(`${a} marked this. Tap again to bring ${victim} back`).count()) === 1);
+
+    const cooldownB = (await readGame(game.code)).killCooldowns?.[b];
+    await row(b, victim).click();
+    await until(async () => !((await readGame(game.code)).killList || []).includes(victim), { what: 'brought back' })
+      .then(() => record('a second tap brings them back', true))
+      .catch(() => record('a second tap brings them back', false));
+    const after = (await readGame(game.code)).killCooldowns || {};
+    record('the killer gets their cooldown back, not the teammate who tapped',
+      !after[a] && JSON.stringify(after[b]) === JSON.stringify(cooldownB), JSON.stringify(after));
+    return game.phones;
+  },
+
   async 'a kill during lockdown changes nobody else\'s screen'(browser) {
     const game = await freshRound(browser, { lockdown: true, names: ALL_NAMES });
     await settled(game.phones, game.code, { timeout: 15000 });

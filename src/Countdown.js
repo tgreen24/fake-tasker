@@ -15,6 +15,7 @@ import LockdownPanel from './components/lockdown/LockdownPanel';
 import LockdownTrigger from './components/lockdown/LockdownTrigger';
 import TaskList from './components/TaskList';
 import MinigameTaskOverlay from './components/minigames/MinigameTaskOverlay';
+import TargetRow from './components/TargetRow';
 
 function Countdown() {
   const { gameCode } = useParams();
@@ -27,7 +28,7 @@ function Countdown() {
   const {
     playerName, countdown, showIntro, introKind, role, isCreator, isDead,
     tasks, completedTasks, tasksBlocked, sabotagingImposter,
-    crewmates, killList, fellowImposters, killCooldownLeft,
+    targets, armedTarget, fellowImposters, killCooldownLeft,
     sabotageActive, sabotagedPlayer, sabotageDialogOpen, eligibleCrewmates,
     sabotageCooldownLeft, sabotageCooldownTotal, killCooldown,
     blended, progress, seatRequests, dealtSeats, awaitingOthers, lateReveal, seatLost,
@@ -160,16 +161,13 @@ function Countdown() {
                 <h3>Targets</h3>
                 <div className="kill-list">
                   <ul>
-                    {crewmates.map((crewmate) => (
-                      <Selectable
-                        key={crewmate}
-                        className={`task-item ${killList.includes(crewmate) ? 'selected' : ''}`}
-                        selected={killList.includes(crewmate)}
-                        label={`${crewmate}${killList.includes(crewmate) ? ', dead' : ''}`}
-                        onSelect={() => actions.toggleKill(crewmate)}
-                      >
-                        <span>{crewmate}</span>
-                      </Selectable>
+                    {targets.map((target) => (
+                      <TargetRow
+                        key={target.name}
+                        target={target}
+                        armed={armedTarget === target.name}
+                        onSelect={() => actions.toggleKill(target.name)}
+                      />
                     ))}
                   </ul>
                 </div>
